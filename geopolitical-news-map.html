@@ -1,0 +1,1201 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ATLAS DE CONFLICTOS — Mapa de Noticias Global</title>
+
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;600&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --ink: #0d0d0d;
+    --paper: #f5f0e8;
+    --cream: #ede8dc;
+    --red: #c0392b;
+    --amber: #e67e22;
+    --blue: #1a3a5c;
+    --gold: #b8960c;
+    --muted: #7a7265;
+    --border: rgba(13,13,13,0.15);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'IBM Plex Sans', sans-serif;
+    background: var(--ink);
+    color: var(--paper);
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ─── HEADER ─── */
+  #header {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    height: 56px;
+    background: var(--ink);
+    border-bottom: 2px solid var(--red);
+  }
+
+  #header .logo {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.3rem;
+    font-weight: 900;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--paper);
+  }
+
+  #header .logo span { color: var(--red); }
+
+  #header .tagline {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+  }
+
+  #header .update-time {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--gold);
+    letter-spacing: 0.1em;
+  }
+
+  #rss-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.6rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  #rss-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: background 0.4s;
+  }
+  #rss-dot.online  { background: #27ae60; box-shadow: 0 0 6px #27ae6088; animation: blink 2s infinite; }
+  #rss-dot.offline { background: #c0392b; }
+  #rss-label { color: var(--muted); }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* ─── MAP ─── */
+  #map {
+    position: absolute;
+    top: 56px; bottom: 0; left: 0; right: 0;
+    z-index: 1;
+  }
+
+  .leaflet-container {
+    background: #1a2535 !important;
+    font-family: 'IBM Plex Sans', sans-serif;
+  }
+
+  /* ─── LEGEND ─── */
+  #legend {
+    position: absolute;
+    bottom: 32px;
+    left: 24px;
+    z-index: 1000;
+    background: rgba(13,13,13,0.92);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--gold);
+    padding: 14px 18px;
+    min-width: 180px;
+  }
+
+  #legend h4 {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.6rem;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 10px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-size: 0.72rem;
+    color: var(--paper);
+  }
+
+  .legend-dot {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    border: 2px solid rgba(255,255,255,0.3);
+  }
+
+  /* ─── FILTERS ─── */
+  #filters {
+    position: absolute;
+    top: 72px;
+    right: 24px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .filter-btn {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.62rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding: 6px 12px;
+    border: 1px solid currentColor;
+    background: rgba(13,13,13,0.85);
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .filter-btn .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .filter-btn.war { color: #c0392b; }
+  .filter-btn.political { color: #3498db; }
+  .filter-btn.economic { color: #f39c12; }
+  .filter-btn.social { color: #27ae60; }
+  .filter-btn.inactive { opacity: 0.3; }
+  .filter-btn:hover { opacity: 0.85; }
+
+  /* ─── POPUP / VIÑETA ─── */
+  .leaflet-popup-content-wrapper {
+    background: var(--ink) !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.7) !important;
+    padding: 0 !important;
+    min-width: 360px;
+    max-width: 480px;
+  }
+
+  .leaflet-popup-content {
+    margin: 0 !important;
+    color: var(--paper);
+  }
+
+  .leaflet-popup-tip-container { display: none; }
+
+  .popup-inner {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .popup-category-bar {
+    height: 4px;
+    width: 100%;
+  }
+
+  .popup-body {
+    padding: 18px 20px 16px;
+  }
+
+  .popup-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .popup-category-tag {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.58rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border: 1px solid currentColor;
+  }
+
+  .popup-date {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.58rem;
+    color: var(--muted);
+  }
+
+  .popup-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.05rem;
+    font-weight: 700;
+    line-height: 1.3;
+    margin-bottom: 10px;
+    color: var(--paper);
+  }
+
+  .popup-summary {
+    font-size: 0.78rem;
+    line-height: 1.65;
+    color: rgba(245,240,232,0.8);
+    margin-bottom: 14px;
+  }
+
+  /* ─── NOTICIAS RSS ─── */
+  .popup-news-list {
+    margin-bottom: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 420px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--muted) transparent;
+    padding-right: 4px;
+  }
+
+  .popup-news-list::-webkit-scrollbar { width: 4px; }
+  .popup-news-list::-webkit-scrollbar-track { background: transparent; }
+  .popup-news-list::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 2px; }
+
+  .news-item {
+    padding: 9px 10px;
+    background: rgba(255,255,255,0.04);
+    border-left: 2px solid rgba(255,255,255,0.12);
+  }
+
+  .news-title {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--paper);
+    text-decoration: none;
+    line-height: 1.35;
+    margin-bottom: 4px;
+    transition: color 0.15s;
+  }
+
+  .news-title:hover { color: var(--gold); text-decoration: underline; }
+
+  .news-snippet {
+    font-size: 0.72rem;
+    line-height: 1.5;
+    color: rgba(245,240,232,0.6);
+    margin-bottom: 5px;
+  }
+
+  .news-meta {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.58rem;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+
+  .popup-status {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.6rem;
+    padding: 4px 8px;
+    margin-bottom: 10px;
+    letter-spacing: 0.06em;
+  }
+  .popup-status.online  { color: #27ae60; background: rgba(39,174,96,0.08); border: 1px solid rgba(39,174,96,0.2); }
+  .popup-status.offline { color: #e67e22; background: rgba(230,126,34,0.08); border: 1px solid rgba(230,126,34,0.2); }
+
+  .popup-region {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.58rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+  }
+
+  .news-title-plain {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--paper);
+    line-height: 1.35;
+    margin-bottom: 4px;
+  }
+
+  .popup-sources {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+
+  .source-chip {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.56rem;
+    color: var(--muted);
+    border: 1px solid rgba(255,255,255,0.1);
+    padding: 2px 6px;
+    letter-spacing: 0.1em;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: color 0.15s, border-color 0.15s;
+  }
+
+  .source-chip:hover {
+    color: var(--gold);
+    border-color: var(--gold);
+  }
+
+  .source-chip::after {
+    content: '↗';
+    font-size: 0.5rem;
+    opacity: 0.6;
+  }
+
+  .popup-loading {
+    padding: 30px 20px;
+    text-align: center;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+  }
+
+  .popup-loading .spinner {
+    display: inline-block;
+    width: 18px; height: 18px;
+    border: 2px solid rgba(255,255,255,0.1);
+    border-top-color: var(--gold);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-bottom: 10px;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ─── MARKER STYLES ─── */
+  .custom-marker {
+    position: relative;
+    cursor: pointer;
+  }
+
+  .marker-pulse {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    animation: pulse 2s ease-out infinite;
+    opacity: 0;
+  }
+
+  @keyframes pulse {
+    0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0.8; }
+    100% { transform: translate(-50%, -50%) scale(3); opacity: 0; }
+  }
+
+  /* ─── COUNTER ─── */
+  #counter {
+    position: absolute;
+    bottom: 32px;
+    right: 24px;
+    z-index: 1000;
+    background: rgba(13,13,13,0.92);
+    border: 1px solid var(--border);
+    border-right: 3px solid var(--red);
+    padding: 12px 16px;
+    text-align: right;
+  }
+
+  #counter .count-number {
+    font-family: 'Playfair Display', serif;
+    font-size: 2rem;
+    font-weight: 900;
+    color: var(--red);
+    line-height: 1;
+  }
+
+  #counter .count-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.58rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  /* ─── TOOLTIP ─── */
+  .leaflet-tooltip {
+    background: var(--ink) !important;
+    border: 1px solid var(--gold) !important;
+    border-radius: 0 !important;
+    color: var(--paper) !important;
+    font-family: 'IBM Plex Mono', monospace !important;
+    font-size: 0.65rem !important;
+    padding: 4px 8px !important;
+    letter-spacing: 0.05em !important;
+    box-shadow: none !important;
+  }
+
+  .leaflet-tooltip::before { display: none !important; }
+
+  /* ─── LOADING OVERLAY ─── */
+  #loading-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: var(--ink);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    transition: opacity 0.5s;
+  }
+
+  #loading-overlay .logo-big {
+    font-family: 'Playfair Display', serif;
+    font-size: 2.5rem;
+    font-weight: 900;
+    letter-spacing: 0.2em;
+    color: var(--paper);
+  }
+
+  #loading-overlay .logo-big span { color: var(--red); }
+
+  #loading-overlay .load-bar {
+    width: 280px;
+    height: 2px;
+    background: rgba(255,255,255,0.1);
+    position: relative;
+    overflow: hidden;
+  }
+
+  #loading-overlay .load-bar::after {
+    content: '';
+    position: absolute;
+    left: -40%;
+    width: 40%;
+    height: 100%;
+    background: var(--red);
+    animation: loadbar 1.2s ease-in-out infinite;
+  }
+
+  @keyframes loadbar {
+    to { left: 100%; }
+  }
+
+  #loading-overlay .load-text {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+  }
+</style>
+</head>
+<body>
+
+<!-- Loading Overlay -->
+<div id="loading-overlay">
+  <div class="logo-big">ATLAS<span>.</span></div>
+  <div class="load-bar"></div>
+  <div class="load-text">Cargando mapa global...</div>
+</div>
+
+<!-- Header -->
+<div id="header">
+  <div class="logo">ATLAS <span>DE CONFLICTOS</span></div>
+  <div class="tagline">Noticias geopolíticas en tiempo real</div>
+  <div style="display:flex;align-items:center;gap:16px;">
+    <div id="rss-status">
+      <div id="rss-dot"></div>
+      <span id="rss-label">RSS</span>
+    </div>
+    <div class="update-time" id="update-time">—</div>
+  </div>
+</div>
+
+<!-- Filters -->
+<div id="filters">
+  <button class="filter-btn war active" data-cat="war" onclick="toggleFilter('war', this)">
+    <span class="dot" style="background:#c0392b"></span> Conflictos bélicos
+  </button>
+  <button class="filter-btn political active" data-cat="political" onclick="toggleFilter('political', this)">
+    <span class="dot" style="background:#3498db"></span> Política
+  </button>
+  <button class="filter-btn economic active" data-cat="economic" onclick="toggleFilter('economic', this)">
+    <span class="dot" style="background:#f39c12"></span> Economía
+  </button>
+  <button class="filter-btn social active" data-cat="social" onclick="toggleFilter('social', this)">
+    <span class="dot" style="background:#27ae60"></span> Social / Sociedad
+  </button>
+</div>
+
+<!-- Legend -->
+<div id="legend">
+  <h4>Categorías</h4>
+  <div class="legend-item"><div class="legend-dot" style="background:#c0392b"></div> Conflicto bélico</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#3498db"></div> Crisis política</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#f39c12"></div> Economía</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#27ae60"></div> Social / Sociedad</div>
+</div>
+
+<!-- Counter -->
+<div id="counter">
+  <div class="count-number" id="event-count">0</div>
+  <div class="count-label">eventos activos</div>
+</div>
+
+<!-- Map -->
+<div id="map"></div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+// ─── CONFIG ───────────────────────────────────────────────────────────────────
+const CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
+
+const CATEGORY_CONFIG = {
+  war:       { color: '#c0392b', label: 'Conflicto bélico', tag: 'GUERRA' },
+  political: { color: '#3498db', label: 'Crisis política',   tag: 'POLÍTICA' },
+  economic:  { color: '#f39c12', label: 'Economía',          tag: 'ECONOMÍA' },
+  social:    { color: '#27ae60', label: 'Social',            tag: 'SOCIAL' },
+};
+
+// ─── EVENTOS GLOBALES ACTUALES ────────────────────────────────────────────────
+// Datos curados con los principales conflictos y noticias del mundo (marzo 2025)
+const EVENTS = [
+  // CONFLICTOS BÉLICOS
+  { id: 1, lat: 48.5,   lng: 31.2,   category: 'war',       title: 'Guerra Rusia–Ucrania', country: 'Ucrania', region: 'Europa del Este',
+    sources: [
+      { name: 'BBC',         url: 'https://www.bbc.com/news/world/europe' },
+      { name: 'Al Jazeera',  url: 'https://www.aljazeera.com/where/ukraine/' },
+      { name: 'DW',          url: 'https://www.dw.com/en/ukraine/t-36745463' },
+    ],
+    summary: 'El conflicto armado entre Rusia y Ucrania continúa en su tercer año. Las líneas del frente se mantienen relativamente estables en el este y sur del país. Los ataques con drones y misiles persisten sobre infraestructura civil. Las negociaciones de paz siguen sin concretarse pese a presión internacional.' },
+
+  { id: 2, lat: 31.5,   lng: 34.8,   category: 'war',       title: 'Conflicto Gaza – Israel', country: 'Gaza/Israel', region: 'Oriente Medio',
+    sources: [
+      { name: 'BBC',        url: 'https://www.bbc.com/news/world/middle_east' },
+      { name: 'Al Jazeera', url: 'https://www.aljazeera.com/where/palestine/' },
+      { name: 'France 24',  url: 'https://www.france24.com/en/middle-east/' },
+    ],
+    summary: 'La guerra entre Israel y Hamas en la Franja de Gaza sigue siendo uno de los conflictos más devastadores de la región. Miles de civiles han muerto, la ayuda humanitaria es insuficiente y el debate sobre un alto al fuego permanente divide a la comunidad internacional.' },
+
+  { id: 3, lat: 15.5,   lng: 32.5,   category: 'war',       title: 'Guerra Civil en Sudán', country: 'Sudán', region: 'África',
+    sources: [
+      { name: 'BBC',        url: 'https://www.bbc.com/news/world/africa' },
+      { name: 'Al Jazeera', url: 'https://www.aljazeera.com/where/sudan/' },
+    ],
+    summary: 'El enfrentamiento entre las Fuerzas Armadas de Sudán (SAF) y las Fuerzas de Apoyo Rápido (RSF) ha generado una de las peores crisis humanitarias del mundo. Millones de personas han sido desplazadas y la violencia se extiende a Darfur y otras regiones.' },
+
+  { id: 4, lat: 13.5,   lng: 2.1,    category: 'war',       title: 'Sahel: Insurgencia yihadista', country: 'Sahel (Mali, Níger, Burkina Faso)', region: 'África Occidental',
+    sources: [
+      { name: 'BBC',       url: 'https://www.bbc.com/news/world/africa' },
+      { name: 'Al Jazeera',url: 'https://www.aljazeera.com/tag/sahel/' },
+      { name: 'France 24', url: 'https://www.france24.com/en/africa/' },
+    ],
+    summary: 'Los grupos yihadistas vinculados a Al-Qaeda y Estado Islámico intensifican ataques en la región del Sahel. Los gobiernos militares de Mali, Níger y Burkina Faso han expulsado a tropas francesas y se acercan a Rusia en busca de apoyo militar.' },
+
+  { id: 5, lat: 15.3,   lng: 44.2,   category: 'war',       title: 'Conflicto en Yemen', country: 'Yemen', region: 'Oriente Medio',
+    sources: [
+      { name: 'BBC',        url: 'https://www.bbc.com/news/world/middle_east' },
+      { name: 'Al Jazeera', url: 'https://www.aljazeera.com/where/yemen/' },
+    ],
+    summary: 'La guerra en Yemen entre las fuerzas hutíes y la coalición liderada por Arabia Saudita persiste. Los hutíes han intensificado ataques con drones y misiles al Mar Rojo, afectando el comercio global. La ONU advierte sobre la gravísima situación humanitaria.' },
+
+  { id: 6, lat: 6.0,    lng: 21.0,   category: 'war',       title: 'Crisis en República del Congo', country: 'RDC', region: 'África Central',
+    sources: [
+      { name: 'BBC',        url: 'https://www.bbc.com/news/world/africa' },
+      { name: 'Al Jazeera', url: 'https://www.aljazeera.com/where/democratic-republic-of-congo/' },
+    ],
+    summary: 'El este de la República Democrática del Congo sufre una escalada de violencia con el avance del grupo armado M23, respaldado por Ruanda. Millones de desplazados y una crisis humanitaria que el mundo observa con preocupación.' },
+
+  // POLÍTICA
+  { id: 7, lat: 38.9,   lng: -77.0,  category: 'political', title: 'Política exterior de Trump', country: 'Estados Unidos', region: 'Norteamérica',
+    sources: [
+      { name: 'BBC',          url: 'https://www.bbc.com/news/world/us_and_canada' },
+      { name: 'CNN',          url: 'https://edition.cnn.com/politics' },
+      { name: 'The Guardian', url: 'https://www.theguardian.com/us-news' },
+    ],
+    summary: 'La administración Trump ha generado tensiones con aliados históricos, imponiendo aranceles y cuestionando compromisos con la OTAN. Las negociaciones con Rusia sobre Ucrania, sin Europa ni Kyiv, han generado alarma en el continente europeo.' },
+
+  { id: 8, lat: 39.9,   lng: 116.4,  category: 'political', title: 'Tensión China–Taiwan–EE.UU.', country: 'China/Taiwan', region: 'Asia-Pacífico',
+    sources: [
+      { name: 'BBC',        url: 'https://www.bbc.com/news/world/asia' },
+      { name: 'Al Jazeera', url: 'https://www.aljazeera.com/tag/china/' },
+      { name: 'DW',         url: 'https://www.dw.com/en/china/t-36958803' },
+    ],
+    summary: 'Las tensiones en el estrecho de Taiwan se mantienen elevadas. China realiza ejercicios militares periódicos y EE.UU. reafirma su apoyo a Taipei mediante ventas de armas. La disputa comercial y tecnológica entre Washington y Pekín agudiza el escenario.' },
+
+  { id: 9, lat: 28.6,   lng: 77.2,   category: 'political', title: 'India–Pakistán: Escalada', country: 'India/Pakistán', region: 'Asia del Sur',
+    sources: [
+      { name: 'BBC',        url: 'https://www.bbc.com/news/world/asia' },
+      { name: 'Al Jazeera', url: 'https://www.aljazeera.com/tag/kashmir/' },
+    ],
+    summary: 'Las relaciones entre India y Pakistán, ambos con arsenales nucleares, se mantienen tensas. Incidentes en la Línea de Control en Cachemira y el debate sobre el estatuto de la región siguen siendo fuentes de conflicto diplomático y esporádicos choques militares.' },
+
+  { id: 10, lat: -33.45, lng: -70.67, category: 'political', title: 'Chile: Crisis política y seguridad', country: 'Chile', region: 'Sudamérica',
+    sources: [
+      { name: 'Cooperativa', url: 'https://www.cooperativa.cl/noticias/pais/' },
+      { name: 'CIPER Chile',  url: 'https://www.ciperchile.cl/' },
+      { name: 'BioBioChile',  url: 'https://www.biobiochile.cl/' },
+      { name: 'The Clinic',   url: 'https://www.theclinic.cl/' },
+    ],
+    summary: 'Chile enfrenta una crisis de seguridad con el crimen organizado y bandas extranjeras que operan en el país. El gobierno del Presidente Boric enfrenta baja aprobación y la oposición gana terreno. CIPER ha revelado irregularidades en fondos públicos y cuestionadas relaciones entre política y negocios.' },
+
+  { id: 11, lat: 10.5,   lng: -66.9,  category: 'political', title: 'Venezuela: Crisis política', country: 'Venezuela', region: 'Sudamérica',
+    sources: [
+      { name: 'BBC',         url: 'https://www.bbc.com/news/world/latin_america' },
+      { name: 'Al Jazeera',  url: 'https://www.aljazeera.com/where/venezuela/' },
+      { name: 'Cooperativa', url: 'https://www.cooperativa.cl/noticias/mundo/' },
+      { name: 'La Nación',   url: 'https://www.lanacion.com.ar/america/' },
+    ],
+    summary: 'El régimen de Nicolás Maduro refuerza su control tras las controvertidas elecciones de 2024. La oposición denuncia fraude y represión. La emigración masiva de venezolanos hacia países de la región continúa generando presión sobre los sistemas de acogida.' },
+
+  { id: 12, lat: 35.7,   lng: 51.4,   category: 'political', title: 'Irán: Tensiones nucleares', country: 'Irán', region: 'Oriente Medio',
+    sources: [
+      { name: 'BBC',        url: 'https://www.bbc.com/news/world/middle_east' },
+      { name: 'Al Jazeera', url: 'https://www.aljazeera.com/where/iran/' },
+      { name: 'DW',         url: 'https://www.dw.com/en/iran/t-36742940' },
+    ],
+    summary: 'Irán continúa enriqueciendo uranio a niveles próximos al grado armamentístico según el OIEA. Las negociaciones con Occidente se encuentran estancadas y EE.UU. mantiene sanciones. Israel advierte sobre posibles acciones preventivas.' },
+
+  // ECONOMÍA
+  { id: 13, lat: 51.5,   lng: -0.1,   category: 'economic',  title: 'Europa: Aranceles de Trump', country: 'Unión Europea', region: 'Europa',
+    sources: [
+      { name: 'BBC',          url: 'https://www.bbc.com/news/world/europe' },
+      { name: 'The Guardian', url: 'https://www.theguardian.com/world/eu' },
+      { name: 'DW',           url: 'https://www.dw.com/en/trade/t-36750468' },
+    ],
+    summary: 'La imposición de aranceles del 25% por parte de la administración Trump a importaciones europeas ha generado alarma en la UE. Bruselas prepara medidas de respuesta y teme una guerra comercial que afecte sectores clave como el automotriz y el agroalimentario.' },
+
+  { id: 14, lat: -15.8,  lng: -47.9,  category: 'economic',  title: 'Brasil: Economía y Lula', country: 'Brasil', region: 'Sudamérica',
+    sources: [
+      { name: 'BBC',         url: 'https://www.bbc.com/news/world/latin_america' },
+      { name: 'Cooperativa', url: 'https://www.cooperativa.cl/noticias/mundo/' },
+      { name: 'La Nación',   url: 'https://www.lanacion.com.ar/america/' },
+    ],
+    summary: 'Brasil enfrenta presiones inflacionarias y un real debilitado. El gobierno Lula impulsa inversión pública y políticas sociales, pero el mercado reacciona con desconfianza. La situación fiscal y las tasas de interés récord son el principal foco de tensión económica.' },
+
+  { id: 15, lat: 25.2,   lng: 55.3,   category: 'economic',  title: 'Petróleo: OPEP+ y mercados', country: 'Emiratos/Golfo Pérsico', region: 'Oriente Medio',
+    sources: [
+      { name: 'BBC',        url: 'https://www.bbc.com/news/business' },
+      { name: 'Al Jazeera', url: 'https://www.aljazeera.com/economy/oil-and-gas/' },
+      { name: 'DW',         url: 'https://www.dw.com/en/energy/t-36750468' },
+    ],
+    summary: 'La OPEP+ mantiene recortes voluntarios de producción para sostener el precio del petróleo. Los mercados están atentos a la demanda de China y la estrategia de Arabia Saudita. La volatilidad energética sigue siendo un factor clave para la economía global.' },
+
+  // SOCIAL
+  { id: 16, lat: 19.4,   lng: -99.1,  category: 'social',    title: 'México: Migración y carteles', country: 'México', region: 'Norteamérica',
+    sources: [
+      { name: 'BBC',         url: 'https://www.bbc.com/news/world/latin_america' },
+      { name: 'Al Jazeera',  url: 'https://www.aljazeera.com/where/mexico/' },
+      { name: 'Cooperativa', url: 'https://www.cooperativa.cl/noticias/mundo/' },
+      { name: 'La Nación',   url: 'https://www.lanacion.com.ar/america/' },
+    ],
+    summary: 'México es epicentro de la crisis migratoria hacia EE.UU. y enfrenta la presión de Washington para frenar los flujos. Los cárteles del narcotráfico mantienen un dominio territorial en varias regiones. La nueva presidenta Claudia Sheinbaum enfrenta su primer gran desafío de seguridad.' },
+
+  { id: 17, lat: 28.2,   lng: 83.9,   category: 'social',    title: 'Myanmar: Golpe y represión', country: 'Myanmar', region: 'Asia',
+    sources: [
+      { name: 'BBC',        url: 'https://www.bbc.com/news/world/asia' },
+      { name: 'Al Jazeera', url: 'https://www.aljazeera.com/where/myanmar/' },
+    ],
+    summary: 'La junta militar birmana mantiene la represión sobre la población civil. La resistencia armada avanza territorialmente pero la crisis humanitaria se profundiza. Miles de personas han muerto desde el golpe de 2021 y millones permanecen desplazadas.' },
+
+  { id: 18, lat: -33.86, lng: 151.2,  category: 'social',    title: 'Australia: Migración y cambio climático', country: 'Australia', region: 'Oceanía',
+    sources: [
+      { name: 'BBC',          url: 'https://www.bbc.com/news/world/australia' },
+      { name: 'The Guardian', url: 'https://www.theguardian.com/australia-news' },
+    ],
+    summary: 'Australia debate nuevas políticas migratorias mientras enfrenta un ciclo de sequías e incendios vinculados al cambio climático. El país mantiene una posición activa en el Indo-Pacífico y su relación con China sigue normalizándose.' },
+
+  // ── LATINOAMÉRICA ─────────────────────────────────────────────────────────
+  { id: 19, lat: -0.22,  lng: -78.5,  category: 'war',       title: 'Ecuador: Narcoterrorismo y estado de excepción', country: 'Ecuador', region: 'Sudamérica',
+    sources: [
+      { name: 'BBC',         url: 'https://www.bbc.com/news/world/latin_america' },
+      { name: 'Al Jazeera',  url: 'https://www.aljazeera.com/where/ecuador/' },
+      { name: 'Cooperativa', url: 'https://www.cooperativa.cl/noticias/mundo/' },
+      { name: 'La Nación',   url: 'https://www.lanacion.com.ar/america/' },
+    ],
+    summary: 'Ecuador vive una crisis de seguridad sin precedentes tras la escalada del crimen organizado vinculado al narcotráfico. El presidente Noboa declaró estado de excepción y militarizó las cárceles tras motines y asesinatos de autoridades. El país es hoy uno de los más violentos de la región.' },
+
+  { id: 20, lat: 18.9,   lng: -72.3,  category: 'social',    title: 'Haití: Colapso del Estado', country: 'Haití', region: 'Caribe',
+    sources: [
+      { name: 'BBC',        url: 'https://www.bbc.com/news/world/latin_america' },
+      { name: 'Al Jazeera', url: 'https://www.aljazeera.com/where/haiti/' },
+      { name: 'France 24',  url: 'https://www.france24.com/en/americas/' },
+    ],
+    summary: 'Haití enfrenta el colapso prácticamente total de sus instituciones estatales. Las pandillas armadas controlan gran parte de Puerto Príncipe. Una misión multinacional liderada por Kenia intenta estabilizar la situación con resultados limitados y la crisis humanitaria es devastadora.' },
+
+  { id: 21, lat: 4.7,    lng: -74.1,  category: 'political', title: 'Colombia: Paz total y narcotráfico', country: 'Colombia', region: 'Sudamérica',
+    sources: [
+      { name: 'BBC',         url: 'https://www.bbc.com/news/world/latin_america' },
+      { name: 'Al Jazeera',  url: 'https://www.aljazeera.com/where/colombia/' },
+      { name: 'Cooperativa', url: 'https://www.cooperativa.cl/noticias/mundo/' },
+      { name: 'La Nación',   url: 'https://www.lanacion.com.ar/america/' },
+    ],
+    summary: 'El presidente Gustavo Petro impulsa su política de paz total con grupos armados, pero las negociaciones con el ELN y disidencias de las FARC avanzan con dificultad. El narcotráfico sigue siendo el motor de la violencia en regiones del Pacífico y la frontera con Venezuela.' },
+
+  { id: 22, lat: -12.0,  lng: -77.0,  category: 'political', title: 'Perú: Inestabilidad política crónica', country: 'Perú', region: 'Sudamérica',
+    sources: [
+      { name: 'BBC',         url: 'https://www.bbc.com/news/world/latin_america' },
+      { name: 'Cooperativa', url: 'https://www.cooperativa.cl/noticias/mundo/' },
+      { name: 'CIPER Chile',  url: 'https://www.ciperchile.cl/' },
+    ],
+    summary: 'Perú acumula seis presidentes en menos de una década. La presidenta Dina Boluarte enfrenta investigaciones por corrupción y protestas sociales persistentes. El Congreso y el Ejecutivo mantienen un conflicto permanente que paraliza la gobernabilidad del país.' },
+
+  // ── EUROPA ───────────────────────────────────────────────────────────────
+  { id: 23, lat: 42.6,   lng: 21.1,   category: 'political', title: 'Serbia-Kosovo: Tensión latente', country: 'Serbia/Kosovo', region: 'Europa',
+    sources: [
+      { name: 'BBC',       url: 'https://www.bbc.com/news/world/europe' },
+      { name: 'DW',        url: 'https://www.dw.com/en/kosovo/t-36745190' },
+      { name: 'France 24', url: 'https://www.france24.com/en/europe/' },
+    ],
+    summary: 'Serbia no reconoce la independencia de Kosovo declarada en 2008 y el conflicto territorial permanece sin resolución. Incidentes fronterizos periódicos y la negativa de Belgrado a normalizar relaciones mantienen la tensión en los Balcanes bajo supervisión de la UE y la OTAN.' },
+
+  { id: 24, lat: 42.3,   lng: 43.4,   category: 'war',       title: 'Georgia: Ocupación rusa y polarización', country: 'Georgia', region: 'Europa Oriental',
+    sources: [
+      { name: 'BBC',       url: 'https://www.bbc.com/news/world/europe' },
+      { name: 'DW',        url: 'https://www.dw.com/en/georgia/t-36748963' },
+      { name: 'Al Jazeera',url: 'https://www.aljazeera.com/tag/georgia/' },
+    ],
+    summary: 'Rusia mantiene tropas en Osetia del Sur y Abjasia, territorios georgianos reconocidos internacionalmente. Internamente, Georgia vive una profunda crisis política entre el gobierno pro-ruso y una oposición pro-europea que lidera multitudinarias protestas en Tbilisi.' },
+
+  // ── ASIA ─────────────────────────────────────────────────────────────────
+  { id: 25, lat: 39.0,   lng: 125.7,  category: 'political', title: 'Corea del Norte: Provocaciones nucleares', country: 'Corea del Norte', region: 'Asia',
+    sources: [
+      { name: 'BBC',        url: 'https://www.bbc.com/news/world/asia' },
+      { name: 'Al Jazeera', url: 'https://www.aljazeera.com/tag/north-korea/' },
+      { name: 'DW',         url: 'https://www.dw.com/en/north-korea/t-36743696' },
+    ],
+    summary: 'Corea del Norte ha intensificado sus pruebas de misiles balísticos intercontinentales y su programa nuclear en abierto desafío a las sanciones internacionales. El régimen de Kim Jong-un ha estrechado lazos militares con Rusia enviando tropas y munición al frente ucraniano a cambio de tecnología.' },
+
+  { id: 26, lat: 11.0,   lng: 114.0,  category: 'political', title: 'Mar del Sur de China: Disputas territoriales', country: 'Asia-Pacífico', region: 'Asia',
+    sources: [
+      { name: 'BBC',        url: 'https://www.bbc.com/news/world/asia' },
+      { name: 'Al Jazeera', url: 'https://www.aljazeera.com/tag/south-china-sea/' },
+      { name: 'CNN',        url: 'https://edition.cnn.com/world/asia' },
+    ],
+    summary: 'China, Vietnam, Filipinas, Malasia y Brunéi disputan la soberanía sobre islas y arrecifes del Mar del Sur de China. Los incidentes entre la guardia costera china y embarcaciones filipinas se han multiplicado generando respuesta directa de EE.UU. en defensa de sus aliados en la región.' },
+
+  // ── ÁFRICA ───────────────────────────────────────────────────────────────
+  { id: 27, lat: 9.0,    lng: 38.7,   category: 'war',       title: 'Etiopía: Conflictos étnicos post-Tigray', country: 'Etiopía', region: 'África Oriental',
+    sources: [
+      { name: 'BBC',        url: 'https://www.bbc.com/news/world/africa' },
+      { name: 'Al Jazeera', url: 'https://www.aljazeera.com/where/ethiopia/' },
+    ],
+    summary: 'Tras el devastador conflicto en Tigray que dejó cientos de miles de muertos, Etiopía enfrenta nuevos brotes de violencia étnica en las regiones de Amhara y Oromia. El país más poblado de África Oriental sigue siendo un foco de inestabilidad con graves consecuencias humanitarias.' },
+
+  { id: 28, lat: 2.0,    lng: 45.3,   category: 'war',       title: 'Somalia: Al-Shabaab y fragilidad estatal', country: 'Somalia', region: 'África Oriental',
+    sources: [
+      { name: 'BBC',        url: 'https://www.bbc.com/news/world/africa' },
+      { name: 'Al Jazeera', url: 'https://www.aljazeera.com/where/somalia/' },
+    ],
+    summary: 'El grupo yihadista Al-Shabaab mantiene control sobre amplias zonas rurales de Somalia y perpetra atentados en Mogadiscio. El gobierno federal apoyado por tropas de la Unión Africana lucha por consolidar su autoridad. La sequía recurrente agrava la crisis humanitaria.' },
+
+  { id: 29, lat: -15.0,  lng: 36.0,   category: 'war',       title: 'Mozambique: Insurgencia en Cabo Delgado', country: 'Mozambique', region: 'África Austral',
+    sources: [
+      { name: 'BBC',        url: 'https://www.bbc.com/news/world/africa' },
+      { name: 'Al Jazeera', url: 'https://www.aljazeera.com/tag/mozambique/' },
+    ],
+    summary: 'La provincia de Cabo Delgado sufre desde 2017 una insurgencia yihadista vinculada al Estado Islámico. A pesar de la intervención de fuerzas de Ruanda y la SADC la violencia persiste. La región alberga enormes reservas de gas natural lo que eleva el interés geopolítico internacional.' },
+
+  { id: 30, lat: 12.4,   lng: 6.0,    category: 'economic',  title: 'Nigeria: Crisis económica y seguridad', country: 'Nigeria', region: 'África Occidental',
+    sources: [
+      { name: 'BBC',        url: 'https://www.bbc.com/news/world/africa' },
+      { name: 'Al Jazeera', url: 'https://www.aljazeera.com/where/nigeria/' },
+      { name: 'France 24',  url: 'https://www.france24.com/en/africa/' },
+    ],
+    summary: 'Nigeria, la economía más grande de África, enfrenta inflación récord, depreciación del naira y desempleo masivo. En el norte del país Boko Haram y el Estado Islámico en África Occidental siguen activos. La inseguridad y el secuestro son problemas estructurales que frenan el desarrollo.' },
+
+  // ── ORIENTE MEDIO / ASIA CENTRAL ─────────────────────────────────────────
+  { id: 31, lat: 33.5,   lng: 36.3,   category: 'political', title: 'Siria: Transición post-Assad', country: 'Siria', region: 'Oriente Medio',
+    sources: [
+      { name: 'BBC',        url: 'https://www.bbc.com/news/world/middle_east' },
+      { name: 'Al Jazeera', url: 'https://www.aljazeera.com/where/syria/' },
+      { name: 'France 24',  url: 'https://www.france24.com/en/middle-east/' },
+    ],
+    summary: 'Tras la caída del régimen de Bashar al-Assad en diciembre de 2024, Siria enfrenta una delicada transición política liderada por grupos rebeldes. La reconstrucción del Estado, el regreso de refugiados y la presencia de múltiples actores armados hacen incierto el camino hacia la estabilidad.' },
+
+  { id: 32, lat: 34.5,   lng: 69.2,   category: 'social',    title: 'Afganistán: Talibán y crisis humanitaria', country: 'Afganistán', region: 'Asia Central',
+    sources: [
+      { name: 'BBC',        url: 'https://www.bbc.com/news/world/asia' },
+      { name: 'Al Jazeera', url: 'https://www.aljazeera.com/where/afghanistan/' },
+      { name: 'DW',         url: 'https://www.dw.com/en/afghanistan/t-36743082' },
+    ],
+    summary: 'El régimen talibán mantiene restricciones extremas sobre la población, especialmente las mujeres, que tienen prohibido el acceso a la educación secundaria y universitaria. La crisis humanitaria se profundiza con millones en riesgo de hambruna y la comunidad internacional mantiene sanciones.' },
+
+  { id: 33, lat: 40.4,   lng: 49.9,   category: 'political', title: 'Azerbaiyán–Armenia: Tensión post-Karabaj', country: 'Azerbaiyán/Armenia', region: 'Cáucaso',
+    sources: [
+      { name: 'BBC',       url: 'https://www.bbc.com/news/world/europe' },
+      { name: 'Al Jazeera',url: 'https://www.aljazeera.com/tag/nagorno-karabakh/' },
+      { name: 'DW',        url: 'https://www.dw.com/en/azerbaijan/t-36748025' },
+    ],
+    summary: 'Tras la reconquista azerbaiyana de Nagorno-Karabaj en 2023 y el éxodo masivo de armenios, ambos países negocian un tratado de paz que aún no se firma. Las tensiones fronterizas persisten y el papel de Rusia como mediador tradicional se ha debilitado.' },
+
+  { id: 34, lat: 15.6,   lng: 39.5,   category: 'war',       title: 'Eritrea: Aislamiento y conflicto regional', country: 'Eritrea', region: 'África Oriental',
+    sources: [
+      { name: 'BBC',        url: 'https://www.bbc.com/news/world/africa' },
+      { name: 'Al Jazeera', url: 'https://www.aljazeera.com/tag/eritrea/' },
+    ],
+    summary: 'Eritrea mantiene uno de los regímenes más cerrados del mundo bajo Isaias Afwerki. El país estuvo implicado en el conflicto de Tigray en Etiopía y su rol desestabilizador en el Cuerno de África genera preocupación internacional. La fuga de jóvenes al extranjero es masiva.' },
+
+  // ── EUROPA ────────────────────────────────────────────────────────────────
+  { id: 35, lat: 47.0,   lng: 29.0,   category: 'political', title: 'Moldavia: Presión rusa y camino europeo', country: 'Moldavia', region: 'Europa Oriental',
+    sources: [
+      { name: 'BBC',       url: 'https://www.bbc.com/news/world/europe' },
+      { name: 'DW',        url: 'https://www.dw.com/en/moldova/t-36748021' },
+      { name: 'France 24', url: 'https://www.france24.com/en/europe/' },
+    ],
+    summary: 'Moldavia avanza hacia la integración europea pese a la presión constante de Rusia, que usa el gas y la región separatista de Transnistria como herramientas de desestabilización. El país inició formalmente las negociaciones de adhesión a la UE en 2024.' },
+
+  { id: 36, lat: 52.2,   lng: 21.0,   category: 'political', title: 'Polonia: Frontera y migración instrumental', country: 'Polonia/Bielorrusia', region: 'Europa',
+    sources: [
+      { name: 'BBC',          url: 'https://www.bbc.com/news/world/europe' },
+      { name: 'DW',           url: 'https://www.dw.com/en/poland/t-36750036' },
+      { name: 'The Guardian', url: 'https://www.theguardian.com/world/poland' },
+    ],
+    summary: 'Bielorrusia sigue usando migrantes como arma política en la frontera con Polonia, en lo que la UE califica de guerra híbrida. Polonia ha reforzado su valla fronteriza y aumentado su presupuesto de defensa al 4% del PIB, el mayor de la OTAN.' },
+
+  // ── ASIA ──────────────────────────────────────────────────────────────────
+  { id: 37, lat: 27.7,   lng: 85.3,   category: 'social',    title: 'Nepal: Reconstrucción y inestabilidad política', country: 'Nepal', region: 'Asia del Sur',
+    sources: [
+      { name: 'BBC',        url: 'https://www.bbc.com/news/world/asia' },
+      { name: 'Al Jazeera', url: 'https://www.aljazeera.com/tag/nepal/' },
+    ],
+    summary: 'Nepal enfrenta una inestabilidad política crónica con múltiples cambios de gobierno en pocos años. Las secuelas de los terremotos, la emigración masiva de jóvenes y la influencia simultánea de India y China hacen de Nepal un caso crítico en el tablero geopolítico del Himalaya.' },
+
+  { id: 38, lat: 23.7,   lng: 90.4,   category: 'political', title: 'Bangladesh: Post-Hasina y nueva transición', country: 'Bangladesh', region: 'Asia del Sur',
+    sources: [
+      { name: 'BBC',        url: 'https://www.bbc.com/news/world/asia' },
+      { name: 'Al Jazeera', url: 'https://www.aljazeera.com/where/bangladesh/' },
+      { name: 'DW',         url: 'https://www.dw.com/en/bangladesh/t-36748088' },
+    ],
+    summary: 'Tras la caída de la primera ministra Sheikh Hasina en agosto de 2024 por masivas protestas estudiantiles, Bangladesh está bajo un gobierno interino liderado por Muhammad Yunus. El país busca estabilizar su democracia y su industria textil, clave para la economía global.' },
+
+  { id: 39, lat: 37.9,   lng: 58.4,   category: 'political', title: 'Turkmenistán: Gas, dictadura y tensión regional', country: 'Turkmenistán', region: 'Asia Central',
+    sources: [
+      { name: 'BBC',        url: 'https://www.bbc.com/news/world/asia' },
+      { name: 'Al Jazeera', url: 'https://www.aljazeera.com/tag/central-asia/' },
+      { name: 'DW',         url: 'https://www.dw.com/en/central-asia/t-36750469' },
+    ],
+    summary: 'Turkmenistán posee las cuartas reservas de gas natural del mundo pero su población vive bajo uno de los regímenes más represivos del planeta. La dependencia energética de países vecinos y la opacidad del régimen de Berdimuhamedov lo convierten en un actor geopolítico peculiar.' },
+
+  // ── AFRICA ────────────────────────────────────────────────────────────────
+  { id: 40, lat: -25.9,  lng: 32.6,   category: 'political', title: 'Zimbabwe: Crisis económica persistente', country: 'Zimbabwe', region: 'África Austral',
+    sources: [
+      { name: 'BBC',        url: 'https://www.bbc.com/news/world/africa' },
+      { name: 'Al Jazeera', url: 'https://www.aljazeera.com/tag/zimbabwe/' },
+    ],
+    summary: 'Zimbabwe sigue atrapado en una crisis económica crónica con hiperinflación, desempleo masivo y colapso de servicios básicos. El presidente Mnangagwa no ha logrado reformas reales desde la caída de Mugabe. La represión política y la emigración masiva continúan siendo la norma.' },
+
+  { id: 41, lat: 3.8,    lng: 11.5,   category: 'political', title: 'Camerún: Crisis anglófona y separatismo', country: 'Camerún', region: 'África Central',
+    sources: [
+      { name: 'BBC',        url: 'https://www.bbc.com/news/world/africa' },
+      { name: 'Al Jazeera', url: 'https://www.aljazeera.com/tag/cameroon/' },
+      { name: 'France 24',  url: 'https://www.france24.com/en/africa/' },
+    ],
+    summary: 'Las regiones anglófonas del noroeste y suroeste de Camerún llevan años en un conflicto armado con el gobierno central francófono. Los grupos separatistas ambazoníanos y las fuerzas gubernamentales protagonizan una guerra de baja intensidad que ha dejado miles de muertos y desplazados.' },
+
+  { id: 42, lat: -4.3,   lng: 15.3,   category: 'economic',  title: 'Congo-Brazzaville: Petróleo y deuda', country: 'Rep. del Congo', region: 'África Central',
+    sources: [
+      { name: 'BBC',       url: 'https://www.bbc.com/news/world/africa' },
+      { name: 'France 24', url: 'https://www.france24.com/en/africa/' },
+    ],
+    summary: 'La República del Congo depende casi exclusivamente del petróleo, cuya producción declina. La deuda con China supera el 50% del PIB y el país enfrenta una crisis de gobernanza bajo Sassou Nguesso, en el poder desde 1979. La pobreza afecta a más del 40% de la población.' },
+
+  // ── LATINOAMÉRICA ─────────────────────────────────────────────────────────
+  { id: 43, lat: -34.9,  lng: -56.2,  category: 'economic',  title: 'Argentina: Milei y ajuste radical', country: 'Argentina', region: 'Sudamérica',
+    sources: [
+      { name: 'La Nación',         url: 'https://www.lanacion.com.ar/economia/' },
+      { name: 'Buenos Aires Times',url: 'https://www.batimes.com.ar/news/economy/' },
+      { name: 'Perfil',            url: 'https://www.perfil.com/seccion/economia/' },
+    ],
+    summary: 'El presidente Javier Milei aplica el ajuste fiscal más drástico de la historia reciente argentina: eliminación de ministerios, desregulación masiva y recorte del gasto público. La inflación bajó pero la recesión golpea a los sectores más vulnerables. El experimento libertario es observado por el mundo.' },
+
+  { id: 44, lat: -17.8,  lng: -63.2,  category: 'political', title: 'Bolivia: Crisis política y pugna de poderes', country: 'Bolivia', region: 'Sudamérica',
+    sources: [
+      { name: 'BBC',         url: 'https://www.bbc.com/news/world/latin_america' },
+      { name: 'Al Jazeera',  url: 'https://www.aljazeera.com/tag/bolivia/' },
+      { name: 'La Nación',   url: 'https://www.lanacion.com.ar/america/' },
+    ],
+    summary: 'Bolivia enfrenta una profunda crisis política entre el expresidente Evo Morales y el presidente Luis Arce, ambos del mismo partido. El fallido intento de golpe de Estado en 2024 y la pugna por el control del MAS mantienen al país en una inestabilidad política sin salida clara a corto plazo.' },
+
+  { id: 45, lat: -0.2,   lng: -78.5,  category: 'economic',  title: 'Panamá: Canal y soberanía bajo presión', country: 'Panamá', region: 'Centroamérica',
+    sources: [
+      { name: 'BBC',        url: 'https://www.bbc.com/news/world/latin_america' },
+      { name: 'Al Jazeera', url: 'https://www.aljazeera.com/tag/panama/' },
+      { name: 'CNN',        url: 'https://edition.cnn.com/world/americas' },
+    ],
+    summary: 'El Canal de Panamá está en el centro de la geopolítica global tras las declaraciones de Trump sobre recuperar el control de la vía interoceánica. El nivel del agua ha caído por la sequía, reduciendo el tránsito. Panamá reafirma su soberanía mientras enfrenta presión de Washington.' },
+
+  // ── ASIA-PACÍFICO ─────────────────────────────────────────────────────────
+  { id: 46, lat: -8.8,   lng: 125.6,  category: 'social',    title: 'Timor Oriental: Pobreza y petróleo', country: 'Timor Oriental', region: 'Asia-Pacífico',
+    sources: [
+      { name: 'BBC',        url: 'https://www.bbc.com/news/world/asia' },
+      { name: 'Al Jazeera', url: 'https://www.aljazeera.com/tag/east-timor/' },
+    ],
+    summary: 'Timor Oriental, uno de los países más jóvenes del mundo, depende casi exclusivamente del petróleo en declive del Mar de Timor. La pobreza afecta al 40% de la población y la dependencia de un único recurso natural amenaza la estabilidad del país a largo plazo.' },
+
+  { id: 47, lat: -6.3,   lng: 143.9,  category: 'social',    title: 'Papúa Nueva Guinea: Violencia tribal y recursos', country: 'Papúa Nueva Guinea', region: 'Pacífico',
+    sources: [
+      { name: 'BBC',        url: 'https://www.bbc.com/news/world/asia' },
+      { name: 'Al Jazeera', url: 'https://www.aljazeera.com/tag/papua-new-guinea/' },
+    ],
+    summary: 'Papúa Nueva Guinea enfrenta una grave crisis de violencia tribal en las tierras altas del país que ha dejado centenares de muertos. Las vastas riquezas naturales en gas y minerales no llegan a la mayoría de la población. China y Australia compiten por influencia en el país.' },
+
+  // ── GLOBAL / TRANSVERSAL ──────────────────────────────────────────────────
+  { id: 48, lat: 55.7,   lng: 37.6,   category: 'political', title: 'Rusia: Economía de guerra y represión interna', country: 'Rusia', region: 'Europa Oriental',
+    sources: [
+      { name: 'BBC',          url: 'https://www.bbc.com/news/world/europe' },
+      { name: 'DW',           url: 'https://www.dw.com/en/russia/t-36748963' },
+      { name: 'The Guardian', url: 'https://www.theguardian.com/world/russia' },
+    ],
+    summary: 'Rusia sostiene su economía de guerra con ingresos energéticos y reorientación hacia China e India. Internamente, la represión se intensifica: opositores encarcelados, medios independientes cerrados y emigración masiva de jóvenes cualificados. El impacto de las sanciones occidentales es objeto de debate.' },
+
+  { id: 49, lat: 1.3,    lng: 103.8,  category: 'economic',  title: 'Singapur: Hub financiero y tensión regional', country: 'Singapur', region: 'Asia-Pacífico',
+    sources: [
+      { name: 'BBC',        url: 'https://www.bbc.com/news/world/asia' },
+      { name: 'Al Jazeera', url: 'https://www.aljazeera.com/tag/singapore/' },
+      { name: 'DW',         url: 'https://www.dw.com/en/asia/t-36750469' },
+    ],
+    summary: 'Singapur es el principal hub financiero y logístico de Asia, pero navega con cautela entre las tensiones de EE.UU. y China. El país atrae capitales que huyen de Hong Kong y mantiene una posición de neutralidad activa mientras fortalece sus lazos comerciales con ambas potencias.' },
+
+  { id: 50, lat: -1.3,   lng: 36.8,   category: 'economic',  title: 'Kenya: Protestas fiscales y liderazgo africano', country: 'Kenya', region: 'África Oriental',
+    sources: [
+      { name: 'BBC',        url: 'https://www.bbc.com/news/world/africa' },
+      { name: 'Al Jazeera', url: 'https://www.aljazeera.com/where/kenya/' },
+      { name: 'France 24',  url: 'https://www.france24.com/en/africa/' },
+    ],
+    summary: 'Kenya vivió en 2024 masivas protestas juveniles contra las subidas de impuestos que obligaron al presidente Ruto a dar marcha atrás. El país lidera la misión multinacional en Haití y aspira a convertirse en hub tecnológico y diplomático del continente africano.' },
+];
+
+// ─── ESTADO ────────────────────────────────────────────────────────────────────
+let map;
+let markers = {};
+let activeFilters = new Set(['war', 'political', 'economic', 'social']);
+let markerLayers = {};
+
+// ─── MAPA ──────────────────────────────────────────────────────────────────────
+function initMap() {
+  map = L.map('map', {
+    center: [20, 10],
+    zoom: 3,
+    minZoom: 2,
+    maxZoom: 14,
+    zoomControl: false,
+  });
+
+  // Tile layer oscuro / cartográfico
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap',
+    maxZoom: 19
+  }).addTo(map);
+
+  L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+  // Crear marcadores
+  EVENTS.forEach(event => createMarker(event));
+  updateCounter();
+}
+
+// ─── MARCADORES ────────────────────────────────────────────────────────────────
+function createMarker(event) {
+  const cfg = CATEGORY_CONFIG[event.category];
+
+  const size = event.category === 'war' ? 22 : 16;
+  const pulseSize = size + 10;
+
+  const icon = L.divIcon({
+    className: '',
+    html: `
+      <div class="custom-marker" style="width:${size}px;height:${size}px;position:relative;">
+        <div class="marker-pulse" style="width:${pulseSize}px;height:${pulseSize}px;background:${cfg.color};top:50%;left:50%;"></div>
+        <div style="
+          width:${size}px;height:${size}px;border-radius:50%;
+          background:${cfg.color};
+          border:2px solid rgba(255,255,255,0.7);
+          box-shadow:0 0 12px ${cfg.color}88;
+          position:relative;z-index:2;
+        "></div>
+      </div>
+    `,
+    iconSize: [size, size],
+    iconAnchor: [size/2, size/2],
+  });
+
+  const marker = L.marker([event.lat, event.lng], { icon })
+    .addTo(map)
+    .bindTooltip(event.title, { permanent: false, direction: 'top', offset: [0, -12] })
+    .on('click', () => openPopup(event, marker));
+
+  if (!markerLayers[event.category]) markerLayers[event.category] = [];
+  markerLayers[event.category].push(marker);
+  markers[event.id] = marker;
+}
+
+// ─── CONFIGURACIÓN RSS ────────────────────────────────────────────────────────
+const RSS_SERVER = 'https://atlas-rss-server-production.up.railway.app';
+let rssOnline = false;
+
+// Verifica conexión al servidor RSS cada 15 segundos
+async function checkRSSServer() {
+  try {
+    const res = await fetch(`${RSS_SERVER}/status`, { signal: AbortSignal.timeout(3000) });
+    rssOnline = res.ok;
+  } catch {
+    rssOnline = false;
+  }
+  const dot   = document.getElementById('rss-dot');
+  const label = document.getElementById('rss-label');
+  if (dot && label) {
+    dot.className   = rssOnline ? 'online' : 'offline';
+    label.textContent = rssOnline ? 'RSS en vivo' : 'RSS offline';
+    label.style.color = rssOnline ? '#27ae60' : '#c0392b';
+  }
+}
+
+// ─── POPUP ────────────────────────────────────────────────────────────────────
+async function openPopup(event, marker) {
+  const cfg = CATEGORY_CONFIG[event.category];
+  const today = new Date().toLocaleDateString('es-CL', { day:'numeric', month:'long', year:'numeric' });
+
+  // Spinner mientras carga
+  L.popup({ maxWidth: 460, closeButton: true, className: 'atlas-popup' })
+    .setLatLng([event.lat, event.lng])
+    .setContent(`
+      <div class="popup-inner">
+        <div class="popup-category-bar" style="background:${cfg.color}"></div>
+        <div class="popup-loading">
+          <div class="spinner"></div>
+          <div>${rssOnline ? 'Leyendo feeds en tiempo real…' : 'Cargando contexto editorial…'}</div>
+        </div>
+      </div>`)
+    .openOn(map);
+
+  const { items, isFallback, total } = await fetchRSSNews(event);
+
+  const itemsHTML = items.map(item => {
+    const date = item.date
+      ? new Date(item.date).toLocaleDateString('es-CL', { day:'numeric', month:'short', year:'numeric' })
+      : '';
+    const snippet = (item.summary || '').replace(/<[^>]*>/g, '').slice(0, 180);
+    const link = item.link
+      ? `<a class="news-title" href="${item.link}" target="_blank" rel="noopener noreferrer">${item.title} ↗</a>`
+      : `<div class="news-title-plain">${item.title}</div>`;
+    return `
+      <div class="news-item">
+        ${link}
+        ${snippet ? `<div class="news-snippet">${snippet}…</div>` : ''}
+        <div class="news-meta">${item.source || ''}${date ? ' · ' + date : ''}</div>
+      </div>`;
+  }).join('');
+
+  const statusBar = isFallback
+    ? `<div class="popup-status offline">⚠ Servidor RSS offline — ejecuta: node rss-server.js</div>`
+    : `<div class="popup-status online">● ${total} noticias en vivo · ${today}</div>`;
+
+  const sourceChips = event.sources
+    .map(s => `<a class="source-chip" href="${s.url}" target="_blank" rel="noopener noreferrer">${s.name} ↗</a>`)
+    .join('');
+
+  // Reemplazar contenido del popup abierto
+  const existing = document.querySelector('.leaflet-popup-content');
+  if (existing) {
+    existing.innerHTML = `
+      <div class="popup-inner">
+        <div class="popup-category-bar" style="background:${cfg.color}"></div>
+        <div class="popup-body">
+          <div class="popup-meta">
+            <span class="popup-category-tag" style="color:${cfg.color};border-color:${cfg.color}">${cfg.tag}</span>
+            <span class="popup-region">${event.region}</span>
+          </div>
+          <div class="popup-title">${event.title}</div>
+          ${statusBar}
+          <div class="popup-news-list">${itemsHTML}</div>
+          <div class="popup-sources">${sourceChips}</div>
+        </div>
+      </div>`;
+    // Forzar reposición del popup
+    map.invalidateSize();
+  }
+}
+
+// ─── FETCH RSS ────────────────────────────────────────────────────────────────
+async function fetchRSSNews(event) {
+  try {
+    const res = await fetch(`${RSS_SERVER}/news?event=${event.id}&limit=30`, {
+      signal: AbortSignal.timeout(8000)
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (!data.items?.length) throw new Error('Sin artículos');
+    rssOnline = true;
+    return { items: data.items, isFallback: false, total: data.total || data.items.length };
+  } catch (err) {
+    rssOnline = false;
+    console.warn('RSS:', err.message);
+    // Fallback editorial
+    return {
+      items: [{ title: event.title, summary: event.summary, link: '', date: '', source: 'Resumen editorial' }],
+      isFallback: true,
+      total: 0
+    };
+  }
+}
+
+// ─── FILTROS ───────────────────────────────────────────────────────────────────
+function toggleFilter(cat, btn) {
+  if (activeFilters.has(cat)) {
+    activeFilters.delete(cat);
+    btn.classList.add('inactive');
+    (markerLayers[cat] || []).forEach(m => m.setOpacity(0.12));
+  } else {
+    activeFilters.add(cat);
+    btn.classList.remove('inactive');
+    (markerLayers[cat] || []).forEach(m => m.setOpacity(1));
+  }
+  updateCounter();
+}
+
+function updateCounter() {
+  let count = 0;
+  activeFilters.forEach(cat => {
+    count += (markerLayers[cat] || []).length;
+  });
+  document.getElementById('event-count').textContent = count;
+}
+
+// ─── RELOJ ─────────────────────────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  const str = now.toLocaleString('es-CL', {
+    day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', timeZone: 'America/Santiago'
+  });
+  document.getElementById('update-time').textContent = `${str} CLT`;
+}
+
+// ─── INIT ──────────────────────────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  setTimeout(() => {
+    initMap();
+    updateClock();
+    setInterval(updateClock, 30000);
+    checkRSSServer();
+    setInterval(checkRSSServer, 15000);
+
+    const overlay = document.getElementById('loading-overlay');
+    overlay.style.opacity = '0';
+    setTimeout(() => overlay.style.display = 'none', 500);
+  }, 1400);
+});
+</script>
+</body>
+</html>
