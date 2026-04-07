@@ -2,564 +2,586 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ATLAS DE CONFLICTOS — Mapa de Noticias Global</title>
-
-<!-- Leaflet CSS -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<!-- Google Fonts -->
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;600&display=swap" rel="stylesheet">
-
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>ATLAS NEWS — Mapa de Noticias Global</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Source+Sans+3:wght@300;400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
+/* ─── DESIGN TOKENS ─────────────────────────────────────────────────────────── */
+:root {
+  --white:    #ffffff;
+  --off:      #f7f6f3;
+  --light:    #ededea;
+  --border:   #d8d6d0;
+  --mid:      #9a9890;
+  --dark:     #3a3835;
+  --ink:      #1a1917;
+  --red:      #c0392b;
+  --blue:     #1d5fa8;
+  --amber:    #c47b0a;
+  --green:    #1e7a4a;
+  --header-h: 56px;
+  --panel-w:  300px;
+  --news-h:   220px;
+  --shadow:   0 2px 12px rgba(0,0,0,0.10);
+  --shadow-lg:0 4px 24px rgba(0,0,0,0.14);
+}
+
+/* ─── RESET ─────────────────────────────────────────────────────────────────── */
+*,*::before,*::after { margin:0; padding:0; box-sizing:border-box; }
+html,body { height:100%; overflow:hidden; }
+body {
+  font-family: 'Source Sans 3', sans-serif;
+  background: var(--off);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ─── LOADING ────────────────────────────────────────────────────────────────── */
+#loading {
+  position:fixed; inset:0; z-index:9999;
+  background:var(--white);
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px;
+  transition:opacity 0.4s;
+}
+#loading .brand {
+  font-family:'Libre Baskerville', serif;
+  font-size:2rem; font-weight:700;
+  color:var(--ink); letter-spacing:0.05em;
+}
+#loading .brand em { color:var(--red); font-style:normal; }
+#loading .bar {
+  width:200px; height:2px; background:var(--light); overflow:hidden;
+}
+#loading .bar-fill {
+  height:100%; width:30%; background:var(--red);
+  animation: loadslide 1s ease-in-out infinite;
+}
+@keyframes loadslide {
+  0%   { transform:translateX(-100%); }
+  100% { transform:translateX(450%); }
+}
+#loading .sub {
+  font-family:'JetBrains Mono', monospace;
+  font-size:0.65rem; color:var(--mid);
+  letter-spacing:0.2em; text-transform:uppercase;
+}
+
+/* ─── LAYOUT SHELL ───────────────────────────────────────────────────────────── */
+#shell {
+  display:grid;
+  grid-template-rows: var(--header-h) 1fr var(--news-h);
+  grid-template-columns: var(--panel-w) 1fr;
+  height:100vh;
+  grid-template-areas:
+    "header  header"
+    "sidebar map"
+    "news    news";
+}
+
+/* ─── HEADER ─────────────────────────────────────────────────────────────────── */
+#header {
+  grid-area: header;
+  background:var(--white);
+  border-bottom:2px solid var(--ink);
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0 20px;
+  z-index:500;
+  box-shadow: var(--shadow);
+}
+.header-brand {
+  display:flex; align-items:baseline; gap:10px;
+}
+.header-brand h1 {
+  font-family:'Libre Baskerville', serif;
+  font-size:1.4rem; font-weight:700;
+  letter-spacing:0.04em; color:var(--ink);
+}
+.header-brand h1 span { color:var(--red); }
+.header-tagline {
+  font-family:'JetBrains Mono', monospace;
+  font-size:0.58rem; color:var(--mid);
+  letter-spacing:0.18em; text-transform:uppercase;
+  display:none;
+}
+.header-right {
+  display:flex; align-items:center; gap:16px;
+}
+#rss-pill {
+  display:flex; align-items:center; gap:5px;
+  padding:3px 10px;
+  border:1px solid var(--border);
+  background:var(--off);
+  font-family:'JetBrains Mono', monospace;
+  font-size:0.58rem; letter-spacing:0.1em;
+  text-transform:uppercase;
+}
+#rss-dot {
+  width:6px; height:6px; border-radius:50%;
+  background:var(--mid); transition:background 0.3s;
+}
+#rss-dot.online  { background:#1e7a4a; animation:pulse-dot 2s infinite; }
+#rss-dot.offline { background:var(--red); }
+#rss-label { color:var(--dark); }
+@keyframes pulse-dot {
+  0%,100%{opacity:1} 50%{opacity:0.4}
+}
+#clock {
+  font-family:'JetBrains Mono', monospace;
+  font-size:0.62rem; color:var(--mid);
+  display:none;
+}
+#event-counter {
+  display:flex; flex-direction:column; align-items:flex-end;
+}
+#event-counter .num {
+  font-family:'Libre Baskerville', serif;
+  font-size:1.3rem; font-weight:700; line-height:1;
+  color:var(--red);
+}
+#event-counter .lbl {
+  font-family:'JetBrains Mono', monospace;
+  font-size:0.5rem; color:var(--mid);
+  letter-spacing:0.15em; text-transform:uppercase;
+}
+
+/* ─── SIDEBAR ────────────────────────────────────────────────────────────────── */
+#sidebar {
+  grid-area: sidebar;
+  background:var(--white);
+  border-right:1px solid var(--border);
+  overflow-y:auto;
+  z-index:400;
+}
+#sidebar::-webkit-scrollbar { width:4px; }
+#sidebar::-webkit-scrollbar-thumb { background:var(--border); }
+
+.sidebar-section {
+  padding:16px;
+  border-bottom:1px solid var(--light);
+}
+.sidebar-label {
+  font-family:'JetBrains Mono', monospace;
+  font-size:0.58rem; letter-spacing:0.2em;
+  text-transform:uppercase; color:var(--mid);
+  margin-bottom:10px;
+}
+
+/* Filter buttons */
+.filter-btn {
+  width:100%; text-align:left;
+  padding:8px 12px;
+  border:1px solid var(--border);
+  background:var(--off);
+  cursor:pointer;
+  display:flex; align-items:center; gap:9px;
+  margin-bottom:6px;
+  transition:all 0.15s;
+  font-family:'Source Sans 3', sans-serif;
+  font-size:0.8rem; font-weight:600;
+  color:var(--dark);
+}
+.filter-btn:last-child { margin-bottom:0; }
+.filter-btn:hover { background:var(--light); }
+.filter-btn.inactive { opacity:0.35; }
+.filter-dot {
+  width:10px; height:10px; border-radius:50%; flex-shrink:0;
+}
+.filter-count {
+  margin-left:auto;
+  font-family:'JetBrains Mono', monospace;
+  font-size:0.65rem; color:var(--mid);
+}
+
+/* Legend */
+.legend-item {
+  display:flex; align-items:center; gap:8px;
+  font-size:0.75rem; color:var(--dark);
+  margin-bottom:5px;
+}
+.legend-dot {
+  width:10px; height:10px; border-radius:50%; flex-shrink:0;
+  border:1.5px solid rgba(0,0,0,0.1);
+}
+
+/* Mobile sidebar toggle */
+#mob-toggle {
+  display:none;
+  position:fixed; bottom:calc(var(--news-h) + 16px); left:16px; z-index:800;
+  width:44px; height:44px;
+  background:var(--white);
+  border:1.5px solid var(--border);
+  box-shadow:var(--shadow);
+  cursor:pointer;
+  font-size:1.1rem;
+  align-items:center; justify-content:center;
+}
+
+/* ─── MAP ────────────────────────────────────────────────────────────────────── */
+#map {
+  grid-area: map;
+  z-index:1;
+  background:var(--light);
+}
+.leaflet-container {
+  background:#e8ecef !important;
+  font-family:'Source Sans 3', sans-serif !important;
+}
+
+/* ─── POPUP ──────────────────────────────────────────────────────────────────── */
+.leaflet-popup-content-wrapper {
+  background:var(--white) !important;
+  border:none !important;
+  border-radius:0 !important;
+  box-shadow:var(--shadow-lg) !important;
+  padding:0 !important;
+  min-width:300px; max-width:400px;
+}
+.leaflet-popup-content { margin:0 !important; }
+.leaflet-popup-tip-container { display:none; }
+.leaflet-popup-close-button {
+  color:var(--dark) !important;
+  font-size:18px !important;
+  top:10px !important; right:10px !important;
+}
+
+.popup-bar { height:3px; width:100%; }
+.popup-body { padding:16px 18px 14px; }
+.popup-meta {
+  display:flex; align-items:center; gap:7px; margin-bottom:8px;
+}
+.popup-tag {
+  font-family:'JetBrains Mono', monospace;
+  font-size:0.55rem; letter-spacing:0.15em; text-transform:uppercase;
+  padding:2px 6px; border:1px solid currentColor;
+}
+.popup-region {
+  font-family:'JetBrains Mono', monospace;
+  font-size:0.55rem; color:var(--mid);
+}
+.popup-title {
+  font-family:'Libre Baskerville', serif;
+  font-size:1rem; font-weight:700; line-height:1.3;
+  color:var(--ink); margin-bottom:10px;
+}
+.popup-status {
+  font-family:'JetBrains Mono', monospace;
+  font-size:0.58rem; padding:4px 8px;
+  margin-bottom:10px; letter-spacing:0.05em;
+}
+.popup-status.online  { color:var(--green); background:rgba(30,122,74,0.06); border:1px solid rgba(30,122,74,0.2); }
+.popup-status.offline { color:var(--amber); background:rgba(196,123,10,0.06); border:1px solid rgba(196,123,10,0.2); }
+
+.popup-news-list {
+  max-height:360px; overflow-y:auto;
+  display:flex; flex-direction:column; gap:8px;
+  margin-bottom:12px;
+  scrollbar-width:thin; scrollbar-color:var(--border) transparent;
+}
+.popup-news-list::-webkit-scrollbar { width:3px; }
+.popup-news-list::-webkit-scrollbar-thumb { background:var(--border); }
+
+.news-item {
+  padding:8px 10px;
+  background:var(--off);
+  border-left:2px solid var(--border);
+}
+.news-item:hover { border-left-color:var(--blue); }
+.news-title {
+  display:block;
+  font-size:0.8rem; font-weight:600; line-height:1.35;
+  color:var(--ink); text-decoration:none;
+  margin-bottom:3px;
+  transition:color 0.15s;
+}
+.news-title:hover { color:var(--blue); }
+.news-snippet {
+  font-size:0.7rem; line-height:1.5;
+  color:var(--mid); margin-bottom:4px;
+}
+.news-meta {
+  font-family:'JetBrains Mono', monospace;
+  font-size:0.55rem; color:var(--mid);
+}
+.news-title-plain {
+  font-size:0.8rem; font-weight:600;
+  color:var(--ink); line-height:1.35; margin-bottom:3px;
+}
+.popup-sources {
+  display:flex; flex-wrap:wrap; gap:4px;
+  padding-top:10px; border-top:1px solid var(--light);
+}
+.source-chip {
+  font-family:'JetBrains Mono', monospace;
+  font-size:0.54rem; color:var(--mid);
+  border:1px solid var(--border);
+  padding:2px 6px; text-decoration:none;
+  transition:all 0.15s; letter-spacing:0.05em;
+}
+.source-chip:hover { color:var(--blue); border-color:var(--blue); }
+.source-chip::after { content:' ↗'; opacity:0.5; }
+
+.popup-loading {
+  padding:28px 20px; text-align:center;
+  font-family:'JetBrains Mono', monospace;
+  font-size:0.65rem; color:var(--mid);
+  letter-spacing:0.1em;
+}
+.spinner {
+  display:inline-block; width:18px; height:18px;
+  border:2px solid var(--light); border-top-color:var(--blue);
+  border-radius:50%; animation:spin 0.7s linear infinite;
+  margin-bottom:8px;
+}
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* ─── TOOLTIP ────────────────────────────────────────────────────────────────── */
+.leaflet-tooltip {
+  background:var(--ink) !important;
+  color:var(--white) !important;
+  border:none !important;
+  border-radius:2px !important;
+  font-family:'Source Sans 3', sans-serif !important;
+  font-size:0.72rem !important;
+  font-weight:600 !important;
+  padding:4px 8px !important;
+  box-shadow:var(--shadow) !important;
+}
+.leaflet-tooltip::before { display:none !important; }
+
+/* ─── NEWS TICKER (bottom) ───────────────────────────────────────────────────── */
+#news-panel {
+  grid-area: news;
+  background:var(--white);
+  border-top:2px solid var(--ink);
+  overflow:hidden;
+  z-index:400;
+}
+.news-panel-header {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:8px 16px 6px;
+  border-bottom:1px solid var(--light);
+}
+.news-panel-title {
+  display:flex; align-items:center; gap:8px;
+}
+.news-panel-title .flag { font-size:1rem; }
+.news-panel-title h3 {
+  font-family:'Libre Baskerville', serif;
+  font-size:0.85rem; font-weight:700; color:var(--ink);
+}
+.news-panel-title .tag {
+  font-family:'JetBrains Mono', monospace;
+  font-size:0.52rem; letter-spacing:0.15em; text-transform:uppercase;
+  padding:2px 6px; background:var(--red); color:var(--white);
+}
+#chile-last-update {
+  font-family:'JetBrains Mono', monospace;
+  font-size:0.55rem; color:var(--mid);
+}
+
+.news-cards {
+  display:grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap:0;
+  height:calc(var(--news-h) - 40px);
+}
+.news-card {
+  padding:10px 14px;
+  border-right:1px solid var(--light);
+  cursor:pointer;
+  transition:background 0.15s;
+  overflow:hidden;
+  display:flex; flex-direction:column; gap:4px;
+  text-decoration:none;
+}
+.news-card:last-child { border-right:none; }
+.news-card:hover { background:var(--off); }
+.news-card .card-source {
+  font-family:'JetBrains Mono', monospace;
+  font-size:0.52rem; color:var(--red);
+  letter-spacing:0.1em; text-transform:uppercase;
+}
+.news-card .card-title {
+  font-family:'Libre Baskerville', serif;
+  font-size:0.78rem; font-weight:700; line-height:1.35;
+  color:var(--ink);
+  display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical;
+  overflow:hidden;
+}
+.news-card .card-snippet {
+  font-size:0.68rem; line-height:1.4; color:var(--mid);
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+  overflow:hidden;
+  margin-top:auto;
+}
+.news-card .card-date {
+  font-family:'JetBrains Mono', monospace;
+  font-size:0.52rem; color:var(--border);
+}
+.news-cards-loading {
+  grid-column:1/-1;
+  display:flex; align-items:center; justify-content:center;
+  gap:8px;
+  font-family:'JetBrains Mono', monospace;
+  font-size:0.65rem; color:var(--mid);
+}
+
+/* ─── MOBILE ─────────────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
   :root {
-    --ink: #0d0d0d;
-    --paper: #f5f0e8;
-    --cream: #ede8dc;
-    --red: #c0392b;
-    --amber: #e67e22;
-    --blue: #1a3a5c;
-    --gold: #b8960c;
-    --muted: #7a7265;
-    --border: rgba(13,13,13,0.15);
+    --panel-w: 0px;
+    --news-h: 200px;
+    --header-h: 50px;
   }
-
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-
-  body {
-    font-family: 'IBM Plex Sans', sans-serif;
-    background: var(--ink);
-    color: var(--paper);
-    height: 100vh;
-    overflow: hidden;
+  #shell {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "header"
+      "map"
+      "news";
   }
-
-  /* ─── HEADER ─── */
-  #header {
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    z-index: 1000;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 24px;
-    height: 56px;
-    background: var(--ink);
-    border-bottom: 2px solid var(--red);
+  #sidebar {
+    position:fixed;
+    top:var(--header-h); left:0; bottom:var(--news-h);
+    width:260px;
+    transform:translateX(-100%);
+    transition:transform 0.25s ease;
+    z-index:700;
+    box-shadow:var(--shadow-lg);
   }
+  #sidebar.open { transform:translateX(0); }
+  #mob-toggle { display:flex; }
 
-  #header .logo {
-    font-family: 'Playfair Display', serif;
-    font-size: 1.3rem;
-    font-weight: 900;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    color: var(--paper);
-  }
+  .header-tagline { display:none; }
+  #clock { display:none; }
+  .header-brand h1 { font-size:1.2rem; }
 
-  #header .logo span { color: var(--red); }
+  .news-cards { grid-template-columns: repeat(2, 1fr); }
+  .news-card:nth-child(n+3) { display:none; }
 
-  #header .tagline {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.65rem;
-    color: var(--muted);
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-  }
+  .leaflet-popup-content-wrapper { min-width:280px; max-width:90vw; }
 
-  #header .update-time {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.65rem;
-    color: var(--gold);
-    letter-spacing: 0.1em;
-  }
+  #event-counter .lbl { display:none; }
+}
 
-  #rss-status {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.6rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-  }
-  #rss-dot {
-    width: 7px; height: 7px;
-    border-radius: 50%;
-    background: var(--muted);
-    transition: background 0.4s;
-  }
-  #rss-dot.online  { background: #27ae60; box-shadow: 0 0 6px #27ae6088; animation: blink 2s infinite; }
-  #rss-dot.offline { background: #c0392b; }
-  #rss-label { color: var(--muted); }
-  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
+@media (max-width: 480px) {
+  .news-cards { grid-template-columns: 1fr; }
+  .news-card:nth-child(n+2) { display:none; }
+  :root { --news-h: 130px; }
+  .news-panel-header { padding:6px 12px 4px; }
+}
 
-  /* ─── MAP ─── */
-  #map {
-    position: absolute;
-    top: 56px; bottom: 0; left: 0; right: 0;
-    z-index: 1;
-  }
-
-  .leaflet-container {
-    background: #1a2535 !important;
-    font-family: 'IBM Plex Sans', sans-serif;
-  }
-
-  /* ─── LEGEND ─── */
-  #legend {
-    position: absolute;
-    bottom: 32px;
-    left: 24px;
-    z-index: 1000;
-    background: rgba(13,13,13,0.92);
-    border: 1px solid var(--border);
-    border-left: 3px solid var(--gold);
-    padding: 14px 18px;
-    min-width: 180px;
-  }
-
-  #legend h4 {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.6rem;
-    letter-spacing: 0.25em;
-    text-transform: uppercase;
-    color: var(--gold);
-    margin-bottom: 10px;
-  }
-
-  .legend-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 6px;
-    font-size: 0.72rem;
-    color: var(--paper);
-  }
-
-  .legend-dot {
-    width: 12px; height: 12px;
-    border-radius: 50%;
-    flex-shrink: 0;
-    border: 2px solid rgba(255,255,255,0.3);
-  }
-
-  /* ─── FILTERS ─── */
-  #filters {
-    position: absolute;
-    top: 72px;
-    right: 24px;
-    z-index: 1000;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .filter-btn {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.62rem;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    padding: 6px 12px;
-    border: 1px solid currentColor;
-    background: rgba(13,13,13,0.85);
-    cursor: pointer;
-    transition: all 0.2s;
-    text-align: left;
-    display: flex;
-    align-items: center;
-    gap: 7px;
-  }
-
-  .filter-btn .dot { width: 8px; height: 8px; border-radius: 50%; }
-  .filter-btn.war { color: #c0392b; }
-  .filter-btn.political { color: #3498db; }
-  .filter-btn.economic { color: #f39c12; }
-  .filter-btn.social { color: #27ae60; }
-  .filter-btn.inactive { opacity: 0.3; }
-  .filter-btn:hover { opacity: 0.85; }
-
-  /* ─── POPUP / VIÑETA ─── */
-  .leaflet-popup-content-wrapper {
-    background: var(--ink) !important;
-    border: none !important;
-    border-radius: 0 !important;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.7) !important;
-    padding: 0 !important;
-    min-width: 360px;
-    max-width: 480px;
-  }
-
-  .leaflet-popup-content {
-    margin: 0 !important;
-    color: var(--paper);
-  }
-
-  .leaflet-popup-tip-container { display: none; }
-
-  .popup-inner {
-    position: relative;
-    overflow: hidden;
-  }
-
-  .popup-category-bar {
-    height: 4px;
-    width: 100%;
-  }
-
-  .popup-body {
-    padding: 18px 20px 16px;
-  }
-
-  .popup-meta {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 10px;
-  }
-
-  .popup-category-tag {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.58rem;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-    padding: 2px 7px;
-    border: 1px solid currentColor;
-  }
-
-  .popup-date {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.58rem;
-    color: var(--muted);
-  }
-
-  .popup-title {
-    font-family: 'Playfair Display', serif;
-    font-size: 1.05rem;
-    font-weight: 700;
-    line-height: 1.3;
-    margin-bottom: 10px;
-    color: var(--paper);
-  }
-
-  .popup-summary {
-    font-size: 0.78rem;
-    line-height: 1.65;
-    color: rgba(245,240,232,0.8);
-    margin-bottom: 14px;
-  }
-
-  /* ─── NOTICIAS RSS ─── */
-  .popup-news-list {
-    margin-bottom: 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    max-height: 420px;
-    overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: var(--muted) transparent;
-    padding-right: 4px;
-  }
-
-  .popup-news-list::-webkit-scrollbar { width: 4px; }
-  .popup-news-list::-webkit-scrollbar-track { background: transparent; }
-  .popup-news-list::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 2px; }
-
-  .news-item {
-    padding: 9px 10px;
-    background: rgba(255,255,255,0.04);
-    border-left: 2px solid rgba(255,255,255,0.12);
-  }
-
-  .news-title {
-    display: block;
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: var(--paper);
-    text-decoration: none;
-    line-height: 1.35;
-    margin-bottom: 4px;
-    transition: color 0.15s;
-  }
-
-  .news-title:hover { color: var(--gold); text-decoration: underline; }
-
-  .news-snippet {
-    font-size: 0.72rem;
-    line-height: 1.5;
-    color: rgba(245,240,232,0.6);
-    margin-bottom: 5px;
-  }
-
-  .news-meta {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.58rem;
-    color: var(--muted);
-    letter-spacing: 0.05em;
-  }
-
-  .popup-status {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.6rem;
-    padding: 4px 8px;
-    margin-bottom: 10px;
-    letter-spacing: 0.06em;
-  }
-  .popup-status.online  { color: #27ae60; background: rgba(39,174,96,0.08); border: 1px solid rgba(39,174,96,0.2); }
-  .popup-status.offline { color: #e67e22; background: rgba(230,126,34,0.08); border: 1px solid rgba(230,126,34,0.2); }
-
-  .popup-region {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.58rem;
-    color: var(--muted);
-    letter-spacing: 0.1em;
-  }
-
-  .news-title-plain {
-    font-size: 0.82rem;
-    font-weight: 600;
-    color: var(--paper);
-    line-height: 1.35;
-    margin-bottom: 4px;
-  }
-
-  .popup-sources {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-    padding-top: 10px;
-    border-top: 1px solid rgba(255,255,255,0.08);
-  }
-
-  .source-chip {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.56rem;
-    color: var(--muted);
-    border: 1px solid rgba(255,255,255,0.1);
-    padding: 2px 6px;
-    letter-spacing: 0.1em;
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    transition: color 0.15s, border-color 0.15s;
-  }
-
-  .source-chip:hover {
-    color: var(--gold);
-    border-color: var(--gold);
-  }
-
-  .source-chip::after {
-    content: '↗';
-    font-size: 0.5rem;
-    opacity: 0.6;
-  }
-
-  .popup-loading {
-    padding: 30px 20px;
-    text-align: center;
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.7rem;
-    color: var(--muted);
-    letter-spacing: 0.1em;
-  }
-
-  .popup-loading .spinner {
-    display: inline-block;
-    width: 18px; height: 18px;
-    border: 2px solid rgba(255,255,255,0.1);
-    border-top-color: var(--gold);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    margin-bottom: 10px;
-  }
-
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  /* ─── MARKER STYLES ─── */
-  .custom-marker {
-    position: relative;
-    cursor: pointer;
-  }
-
-  .marker-pulse {
-    position: absolute;
-    top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
-    border-radius: 50%;
-    animation: pulse 2s ease-out infinite;
-    opacity: 0;
-  }
-
-  @keyframes pulse {
-    0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0.8; }
-    100% { transform: translate(-50%, -50%) scale(3); opacity: 0; }
-  }
-
-  /* ─── COUNTER ─── */
-  #counter {
-    position: absolute;
-    bottom: 32px;
-    right: 24px;
-    z-index: 1000;
-    background: rgba(13,13,13,0.92);
-    border: 1px solid var(--border);
-    border-right: 3px solid var(--red);
-    padding: 12px 16px;
-    text-align: right;
-  }
-
-  #counter .count-number {
-    font-family: 'Playfair Display', serif;
-    font-size: 2rem;
-    font-weight: 900;
-    color: var(--red);
-    line-height: 1;
-  }
-
-  #counter .count-label {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.58rem;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin-top: 2px;
-  }
-
-  /* ─── TOOLTIP ─── */
-  .leaflet-tooltip {
-    background: var(--ink) !important;
-    border: 1px solid var(--gold) !important;
-    border-radius: 0 !important;
-    color: var(--paper) !important;
-    font-family: 'IBM Plex Mono', monospace !important;
-    font-size: 0.65rem !important;
-    padding: 4px 8px !important;
-    letter-spacing: 0.05em !important;
-    box-shadow: none !important;
-  }
-
-  .leaflet-tooltip::before { display: none !important; }
-
-  /* ─── LOADING OVERLAY ─── */
-  #loading-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 9999;
-    background: var(--ink);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 20px;
-    transition: opacity 0.5s;
-  }
-
-  #loading-overlay .logo-big {
-    font-family: 'Playfair Display', serif;
-    font-size: 2.5rem;
-    font-weight: 900;
-    letter-spacing: 0.2em;
-    color: var(--paper);
-  }
-
-  #loading-overlay .logo-big span { color: var(--red); }
-
-  #loading-overlay .load-bar {
-    width: 280px;
-    height: 2px;
-    background: rgba(255,255,255,0.1);
-    position: relative;
-    overflow: hidden;
-  }
-
-  #loading-overlay .load-bar::after {
-    content: '';
-    position: absolute;
-    left: -40%;
-    width: 40%;
-    height: 100%;
-    background: var(--red);
-    animation: loadbar 1.2s ease-in-out infinite;
-  }
-
-  @keyframes loadbar {
-    to { left: 100%; }
-  }
-
-  #loading-overlay .load-text {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.65rem;
-    color: var(--muted);
-    letter-spacing: 0.3em;
-    text-transform: uppercase;
-  }
+@media (min-width: 1024px) {
+  #clock { display:block; }
+  .header-tagline { display:block; }
+}
 </style>
 </head>
 <body>
 
-<!-- Loading Overlay -->
-<div id="loading-overlay">
-  <div class="logo-big">ATLAS<span>.</span></div>
-  <div class="load-bar"></div>
-  <div class="load-text">Cargando mapa global...</div>
+<!-- Loading -->
+<div id="loading">
+  <div class="brand">ATLAS <em>NEWS</em></div>
+  <div class="bar"><div class="bar-fill"></div></div>
+  <div class="sub">Cargando mapa global…</div>
 </div>
 
-<!-- Header -->
-<div id="header">
-  <div class="logo">ATLAS <span>DE CONFLICTOS</span></div>
-  <div class="tagline">Noticias geopolíticas en tiempo real</div>
-  <div style="display:flex;align-items:center;gap:16px;">
-    <div id="rss-status">
-      <div id="rss-dot"></div>
-      <span id="rss-label">RSS</span>
+<!-- Shell -->
+<div id="shell">
+
+  <!-- Header -->
+  <header id="header">
+    <div class="header-brand">
+      <h1>ATLAS <span>NEWS</span></h1>
+      <div class="header-tagline">Noticias geopolíticas en tiempo real</div>
     </div>
-    <div class="update-time" id="update-time">—</div>
-  </div>
-</div>
+    <div class="header-right">
+      <div id="rss-pill">
+        <div id="rss-dot"></div>
+        <span id="rss-label">RSS</span>
+      </div>
+      <div id="clock"></div>
+      <div id="event-counter">
+        <div class="num" id="event-count">0</div>
+        <div class="lbl">eventos</div>
+      </div>
+    </div>
+  </header>
 
-<!-- Filters -->
-<div id="filters">
-  <button class="filter-btn war active" data-cat="war" onclick="toggleFilter('war', this)">
-    <span class="dot" style="background:#c0392b"></span> Conflictos bélicos
-  </button>
-  <button class="filter-btn political active" data-cat="political" onclick="toggleFilter('political', this)">
-    <span class="dot" style="background:#3498db"></span> Política
-  </button>
-  <button class="filter-btn economic active" data-cat="economic" onclick="toggleFilter('economic', this)">
-    <span class="dot" style="background:#f39c12"></span> Economía
-  </button>
-  <button class="filter-btn social active" data-cat="social" onclick="toggleFilter('social', this)">
-    <span class="dot" style="background:#27ae60"></span> Social / Sociedad
-  </button>
-</div>
+  <!-- Sidebar -->
+  <aside id="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-label">Filtrar por tipo</div>
+      <button class="filter-btn" data-cat="war" onclick="toggleFilter('war',this)">
+        <span class="filter-dot" style="background:#c0392b"></span>
+        Conflictos bélicos
+        <span class="filter-count" id="cnt-war">0</span>
+      </button>
+      <button class="filter-btn" data-cat="political" onclick="toggleFilter('political',this)">
+        <span class="filter-dot" style="background:#1d5fa8"></span>
+        Crisis política
+        <span class="filter-count" id="cnt-political">0</span>
+      </button>
+      <button class="filter-btn" data-cat="economic" onclick="toggleFilter('economic',this)">
+        <span class="filter-dot" style="background:#c47b0a"></span>
+        Economía
+        <span class="filter-count" id="cnt-economic">0</span>
+      </button>
+      <button class="filter-btn" data-cat="social" onclick="toggleFilter('social',this)">
+        <span class="filter-dot" style="background:#1e7a4a"></span>
+        Social / Sociedad
+        <span class="filter-count" id="cnt-social">0</span>
+      </button>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-label">Referencia</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#c0392b"></div> Conflicto bélico activo</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#1d5fa8"></div> Crisis política</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#c47b0a"></div> Tensión económica</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#1e7a4a"></div> Crisis social</div>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-label">Fuentes</div>
+      <div style="font-size:0.72rem;color:var(--mid);line-height:1.6;">
+        BBC · Al Jazeera · DW · CNN<br>
+        NPR · The Guardian · France 24<br>
+        Cooperativa · CIPER · La Nación AR<br>
+        Buenos Aires Times
+      </div>
+    </div>
+  </aside>
 
-<!-- Legend -->
-<div id="legend">
-  <h4>Categorías</h4>
-  <div class="legend-item"><div class="legend-dot" style="background:#c0392b"></div> Conflicto bélico</div>
-  <div class="legend-item"><div class="legend-dot" style="background:#3498db"></div> Crisis política</div>
-  <div class="legend-item"><div class="legend-dot" style="background:#f39c12"></div> Economía</div>
-  <div class="legend-item"><div class="legend-dot" style="background:#27ae60"></div> Social / Sociedad</div>
-</div>
+  <!-- Map -->
+  <main id="map"></main>
 
-<!-- Counter -->
-<div id="counter">
-  <div class="count-number" id="event-count">0</div>
-  <div class="count-label">eventos activos</div>
-</div>
+  <!-- Chile News Panel -->
+  <section id="news-panel">
+    <div class="news-panel-header">
+      <div class="news-panel-title">
+        <span class="flag">🇨🇱</span>
+        <h3>Chile — Últimas noticias</h3>
+        <span class="tag">En vivo</span>
+      </div>
+      <span id="chile-last-update">—</span>
+    </div>
+    <div class="news-cards" id="chile-cards">
+      <div class="news-cards-loading">
+        <div class="spinner"></div>
+        Cargando noticias…
+      </div>
+    </div>
+  </section>
 
-<!-- Map -->
-<div id="map"></div>
+</div><!-- /shell -->
 
-<!-- Leaflet JS -->
+<!-- Mobile sidebar toggle -->
+<button id="mob-toggle" onclick="toggleSidebar()">☰</button>
+
+<!-- Leaflet -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
 <script>
-// ─── CONFIG ───────────────────────────────────────────────────────────────────
-const CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
-
+// ─── DATA ──────────────────────────────────────────────────────────────────────
 const CATEGORY_CONFIG = {
   war:       { color: '#c0392b', label: 'Conflicto bélico', tag: 'GUERRA' },
   political: { color: '#3498db', label: 'Crisis política',   tag: 'POLÍTICA' },
@@ -567,8 +589,6 @@ const CATEGORY_CONFIG = {
   social:    { color: '#27ae60', label: 'Social',            tag: 'SOCIAL' },
 };
 
-// ─── EVENTOS GLOBALES ACTUALES ────────────────────────────────────────────────
-// Datos curados con los principales conflictos y noticias del mundo (marzo 2025)
 const EVENTS = [
   // CONFLICTOS BÉLICOS
   { id: 1, lat: 48.5,   lng: 31.2,   category: 'war',       title: 'Guerra Rusia–Ucrania', country: 'Ucrania', region: 'Europa del Este',
@@ -921,9 +941,10 @@ const EVENTS = [
 
   { id: 44, lat: -17.8,  lng: -63.2,  category: 'political', title: 'Bolivia: Crisis política y pugna de poderes', country: 'Bolivia', region: 'Sudamérica',
     sources: [
-      { name: 'BBC',         url: 'https://www.bbc.com/news/world/latin_america' },
+      { name: 'BBC',        url: 'https://www.bbc.com/news/world/latin_america' },
+      { name: 'Los Tiempos', url: 'https://www.lostiempos.com/' },
+      { name: 'Erbol',       url: 'https://erbol.com.bo/' },
       { name: 'Al Jazeera',  url: 'https://www.aljazeera.com/tag/bolivia/' },
-      { name: 'La Nación',   url: 'https://www.lanacion.com.ar/america/' },
     ],
     summary: 'Bolivia enfrenta una profunda crisis política entre el expresidente Evo Morales y el presidente Luis Arce, ambos del mismo partido. El fallido intento de golpe de Estado en 2024 y la pugna por el control del MAS mantienen al país en una inestabilidad política sin salida clara a corto plazo.' },
 
@@ -976,225 +997,269 @@ const EVENTS = [
     summary: 'Kenya vivió en 2024 masivas protestas juveniles contra las subidas de impuestos que obligaron al presidente Ruto a dar marcha atrás. El país lidera la misión multinacional en Haití y aspira a convertirse en hub tecnológico y diplomático del continente africano.' },
 ];
 
-// ─── ESTADO ────────────────────────────────────────────────────────────────────
-let map;
-let markers = {};
-let activeFilters = new Set(['war', 'political', 'economic', 'social']);
+// ─── CONFIG ───────────────────────────────────────────────────────────────────
+const RSS_SERVER = 'https://atlas-rss-server-production.up.railway.app';
+let map, rssOnline = false;
+let activeFilters = new Set(['war','political','economic','social']);
 let markerLayers = {};
 
-// ─── MAPA ──────────────────────────────────────────────────────────────────────
+// ─── CATEGORY STYLES ──────────────────────────────────────────────────────────
+const CAT = {
+  war:       { color:'#c0392b', tag:'GUERRA',    label:'Conflicto bélico' },
+  political: { color:'#1d5fa8', tag:'POLÍTICA',  label:'Crisis política' },
+  economic:  { color:'#c47b0a', tag:'ECONOMÍA',  label:'Economía' },
+  social:    { color:'#1e7a4a', tag:'SOCIAL',    label:'Social' },
+};
+
+const SOURCE_LABELS = {
+  bbc:'BBC', bbc_mid:'BBC', bbc_africa:'BBC', bbc_asia:'BBC',
+  bbc_europe:'BBC', bbc_latam:'BBC',
+  aljazeera:'Al Jazeera', dw:'Deutsche Welle', npr:'NPR',
+  cnn:'CNN', cnn_world:'CNN', cnn_americas:'CNN',
+  guardian:'The Guardian', france24:'France 24',
+  coop_pais:'Cooperativa', coop_mundo:'Cooperativa', coop_econ:'Cooperativa',
+  biobio:'BioBioChile', theclinic:'The Clinic', ciper:'CIPER Chile',
+  lanacion:'La Nación', batimes:'Buenos Aires Times', perfil:'Perfil',
+  caretas:'Caretas', diariouno_pe:'Diario Uno',
+  voa_peru:'VOA', voa_vzla:'VOA', voa_bolivia:'VOA', voa_ecuador:'VOA', voa_mexico:'VOA',
+  caracaschron:'Caracas Chronicles', elnacional_ve:'El Nacional',
+  lostiempos:'Los Tiempos', erbol:'Erbol',
+  cronica_ec:'Crónica EC', eldiario_ec:'El Diario EC',
+  animalpol:'Animal Político', proceso_mx:'Proceso',
+};
+
+// ─── MAP INIT ─────────────────────────────────────────────────────────────────
 function initMap() {
   map = L.map('map', {
-    center: [20, 10],
-    zoom: 3,
-    minZoom: 2,
-    maxZoom: 14,
-    zoomControl: false,
+    center:[20,10], zoom:3, minZoom:2, maxZoom:14, zoomControl:false
   });
 
-  // Tile layer oscuro / cartográfico
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap',
-    maxZoom: 19
+  // Light cartographic tiles
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    attribution:'&copy; CARTO &copy; OpenStreetMap', maxZoom:19
   }).addTo(map);
 
-  L.control.zoom({ position: 'bottomright' }).addTo(map);
+  L.control.zoom({ position:'bottomright' }).addTo(map);
 
-  // Crear marcadores
-  EVENTS.forEach(event => createMarker(event));
+  EVENTS.forEach(ev => createMarker(ev));
   updateCounter();
+  updateFilterCounts();
 }
 
-// ─── MARCADORES ────────────────────────────────────────────────────────────────
-function createMarker(event) {
-  const cfg = CATEGORY_CONFIG[event.category];
-
-  const size = event.category === 'war' ? 22 : 16;
-  const pulseSize = size + 10;
+// ─── MARKERS ─────────────────────────────────────────────────────────────────
+function createMarker(ev) {
+  const col = CAT[ev.category].color;
+  const size = ev.category === 'war' ? 20 : 14;
 
   const icon = L.divIcon({
-    className: '',
-    html: `
-      <div class="custom-marker" style="width:${size}px;height:${size}px;position:relative;">
-        <div class="marker-pulse" style="width:${pulseSize}px;height:${pulseSize}px;background:${cfg.color};top:50%;left:50%;"></div>
-        <div style="
-          width:${size}px;height:${size}px;border-radius:50%;
-          background:${cfg.color};
-          border:2px solid rgba(255,255,255,0.7);
-          box-shadow:0 0 12px ${cfg.color}88;
-          position:relative;z-index:2;
-        "></div>
-      </div>
-    `,
-    iconSize: [size, size],
-    iconAnchor: [size/2, size/2],
+    className:'',
+    html: `<div style="position:relative;width:${size}px;height:${size}px;">
+      <div style="position:absolute;inset:0;border-radius:50%;background:${col};
+        border:2px solid white;box-shadow:0 1px 6px rgba(0,0,0,0.25);"></div>
+      <div style="position:absolute;inset:-4px;border-radius:50%;background:${col};
+        opacity:0.25;animation:pulse-mk 2.5s ease-out infinite;"></div>
+    </div>`,
+    iconSize:[size,size], iconAnchor:[size/2,size/2]
   });
 
-  const marker = L.marker([event.lat, event.lng], { icon })
+  const mk = L.marker([ev.lat, ev.lng], { icon })
     .addTo(map)
-    .bindTooltip(event.title, { permanent: false, direction: 'top', offset: [0, -12] })
-    .on('click', () => openPopup(event, marker));
+    .bindTooltip(ev.title, { permanent:false, direction:'top', offset:[0,-8] })
+    .on('click', () => openPopup(ev));
 
-  if (!markerLayers[event.category]) markerLayers[event.category] = [];
-  markerLayers[event.category].push(marker);
-  markers[event.id] = marker;
-}
-
-// ─── CONFIGURACIÓN RSS ────────────────────────────────────────────────────────
-const RSS_SERVER = 'https://atlas-rss-server-production.up.railway.app';
-let rssOnline = false;
-
-// Verifica conexión al servidor RSS cada 15 segundos
-async function checkRSSServer() {
-  try {
-    const res = await fetch(`${RSS_SERVER}/status`, { signal: AbortSignal.timeout(3000) });
-    rssOnline = res.ok;
-  } catch {
-    rssOnline = false;
-  }
-  const dot   = document.getElementById('rss-dot');
-  const label = document.getElementById('rss-label');
-  if (dot && label) {
-    dot.className   = rssOnline ? 'online' : 'offline';
-    label.textContent = rssOnline ? 'RSS en vivo' : 'RSS offline';
-    label.style.color = rssOnline ? '#27ae60' : '#c0392b';
-  }
+  if (!markerLayers[ev.category]) markerLayers[ev.category] = [];
+  markerLayers[ev.category].push(mk);
 }
 
 // ─── POPUP ────────────────────────────────────────────────────────────────────
-async function openPopup(event, marker) {
-  const cfg = CATEGORY_CONFIG[event.category];
-  const today = new Date().toLocaleDateString('es-CL', { day:'numeric', month:'long', year:'numeric' });
+async function openPopup(ev) {
+  const cfg = CAT[ev.category];
+  const today = new Date().toLocaleDateString('es-CL',{day:'numeric',month:'long',year:'numeric'});
 
-  // Spinner mientras carga
-  L.popup({ maxWidth: 460, closeButton: true, className: 'atlas-popup' })
-    .setLatLng([event.lat, event.lng])
+  const pop = L.popup({ maxWidth:420, closeButton:true })
+    .setLatLng([ev.lat,ev.lng])
     .setContent(`
-      <div class="popup-inner">
-        <div class="popup-category-bar" style="background:${cfg.color}"></div>
-        <div class="popup-loading">
-          <div class="spinner"></div>
-          <div>${rssOnline ? 'Leyendo feeds en tiempo real…' : 'Cargando contexto editorial…'}</div>
+      <div>
+        <div class="popup-bar" style="background:${cfg.color}"></div>
+        <div class="popup-body">
+          <div class="popup-loading"><div class="spinner"></div><div>Cargando noticias…</div></div>
         </div>
       </div>`)
     .openOn(map);
 
-  const { items, isFallback, total } = await fetchRSSNews(event);
+  const { items, isFallback, total } = await fetchRSS(ev);
 
   const itemsHTML = items.map(item => {
-    const date = item.date
-      ? new Date(item.date).toLocaleDateString('es-CL', { day:'numeric', month:'short', year:'numeric' })
-      : '';
-    const snippet = (item.summary || '').replace(/<[^>]*>/g, '').slice(0, 180);
+    const date = item.date ? new Date(item.date).toLocaleDateString('es-CL',{day:'numeric',month:'short'}) : '';
+    const snippet = (item.summary||'').replace(/<[^>]*>/g,'').slice(0,150);
     const link = item.link
-      ? `<a class="news-title" href="${item.link}" target="_blank" rel="noopener noreferrer">${item.title} ↗</a>`
+      ? `<a class="news-title" href="${item.link}" target="_blank" rel="noopener">${item.title}</a>`
       : `<div class="news-title-plain">${item.title}</div>`;
-    return `
-      <div class="news-item">
-        ${link}
-        ${snippet ? `<div class="news-snippet">${snippet}…</div>` : ''}
-        <div class="news-meta">${item.source || ''}${date ? ' · ' + date : ''}</div>
-      </div>`;
+    return `<div class="news-item">
+      ${link}
+      ${snippet ? `<div class="news-snippet">${snippet}…</div>` : ''}
+      <div class="news-meta">${item.source||''} ${date ? '· '+date : ''}</div>
+    </div>`;
   }).join('');
 
   const statusBar = isFallback
-    ? `<div class="popup-status offline">⚠ Servidor RSS offline — ejecuta: node rss-server.js</div>`
-    : `<div class="popup-status online">● ${total} noticias en vivo · ${today}</div>`;
+    ? `<div class="popup-status offline">⚠ RSS offline — resumen editorial</div>`
+    : `<div class="popup-status online">● ${total} noticias · ${today}</div>`;
 
-  const sourceChips = event.sources
-    .map(s => `<a class="source-chip" href="${s.url}" target="_blank" rel="noopener noreferrer">${s.name} ↗</a>`)
-    .join('');
+  const chips = ev.sources.map(s =>
+    `<a class="source-chip" href="${s.url}" target="_blank" rel="noopener">${s.name}</a>`
+  ).join('');
 
-  // Reemplazar contenido del popup abierto
-  const existing = document.querySelector('.leaflet-popup-content');
-  if (existing) {
-    existing.innerHTML = `
-      <div class="popup-inner">
-        <div class="popup-category-bar" style="background:${cfg.color}"></div>
-        <div class="popup-body">
-          <div class="popup-meta">
-            <span class="popup-category-tag" style="color:${cfg.color};border-color:${cfg.color}">${cfg.tag}</span>
-            <span class="popup-region">${event.region}</span>
-          </div>
-          <div class="popup-title">${event.title}</div>
-          ${statusBar}
-          <div class="popup-news-list">${itemsHTML}</div>
-          <div class="popup-sources">${sourceChips}</div>
+  const el = document.querySelector('.leaflet-popup-content');
+  if (el) el.innerHTML = `
+    <div>
+      <div class="popup-bar" style="background:${cfg.color}"></div>
+      <div class="popup-body">
+        <div class="popup-meta">
+          <span class="popup-tag" style="color:${cfg.color};border-color:${cfg.color}">${cfg.tag}</span>
+          <span class="popup-region">${ev.region}</span>
         </div>
-      </div>`;
-    // Forzar reposición del popup
-    map.invalidateSize();
-  }
+        <div class="popup-title">${ev.title}</div>
+        ${statusBar}
+        <div class="popup-news-list">${itemsHTML}</div>
+        <div class="popup-sources">${chips}</div>
+      </div>
+    </div>`;
 }
 
-// ─── FETCH RSS ────────────────────────────────────────────────────────────────
-async function fetchRSSNews(event) {
+// ─── RSS FETCH ────────────────────────────────────────────────────────────────
+async function fetchRSS(ev) {
   try {
-    const res = await fetch(`${RSS_SERVER}/news?event=${event.id}&limit=30`, {
+    const res = await fetch(`${RSS_SERVER}/news?event=${ev.id}&limit=30`, {
       signal: AbortSignal.timeout(8000)
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    if (!data.items?.length) throw new Error('Sin artículos');
+    if (!data.items?.length) throw new Error('vacío');
     rssOnline = true;
-    return { items: data.items, isFallback: false, total: data.total || data.items.length };
-  } catch (err) {
+    return { items:data.items, isFallback:false, total:data.total||data.items.length };
+  } catch(e) {
     rssOnline = false;
-    console.warn('RSS:', err.message);
-    // Fallback editorial
     return {
-      items: [{ title: event.title, summary: event.summary, link: '', date: '', source: 'Resumen editorial' }],
-      isFallback: true,
-      total: 0
+      items:[{ title:ev.title, summary:ev.summary, link:'', date:'', source:'Resumen editorial' }],
+      isFallback:true, total:0
     };
   }
 }
 
-// ─── FILTROS ───────────────────────────────────────────────────────────────────
+// ─── CHILE NEWS PANEL ─────────────────────────────────────────────────────────
+async function loadChileNews() {
+  try {
+    const res = await fetch(`${RSS_SERVER}/news?event=10&limit=5`, {
+      signal: AbortSignal.timeout(10000)
+    });
+    if (!res.ok) throw new Error('error');
+    const data = await res.json();
+    const items = data.items?.slice(0,5) || [];
+
+    const container = document.getElementById('chile-cards');
+    if (!items.length) {
+      container.innerHTML = '<div class="news-cards-loading">Sin noticias disponibles en este momento</div>';
+      return;
+    }
+
+    container.innerHTML = items.map(item => {
+      const date = item.date
+        ? new Date(item.date).toLocaleDateString('es-CL',{day:'numeric',month:'short',year:'numeric'})
+        : '';
+      const snippet = (item.summary||'').replace(/<[^>]*>/g,'').slice(0,100);
+      return `<a class="news-card" href="${item.link||'#'}" target="_blank" rel="noopener">
+        <div class="card-source">${item.source||'Chile'}</div>
+        <div class="card-title">${item.title}</div>
+        <div class="card-snippet">${snippet}</div>
+        <div class="card-date">${date}</div>
+      </a>`;
+    }).join('');
+
+    document.getElementById('chile-last-update').textContent =
+      'Actualizado: ' + new Date().toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
+
+  } catch(e) {
+    document.getElementById('chile-cards').innerHTML =
+      '<div class="news-cards-loading">Inicia rss-server.js para ver noticias en vivo</div>';
+  }
+}
+
+// ─── RSS STATUS ───────────────────────────────────────────────────────────────
+async function checkRSS() {
+  try {
+    const res = await fetch(`${RSS_SERVER}/status`, { signal:AbortSignal.timeout(3000) });
+    rssOnline = res.ok;
+  } catch { rssOnline = false; }
+  const dot = document.getElementById('rss-dot');
+  const lbl = document.getElementById('rss-label');
+  if (dot) dot.className = rssOnline ? 'online' : 'offline';
+  if (lbl) { lbl.textContent = rssOnline ? 'RSS en vivo' : 'RSS offline'; }
+}
+
+// ─── FILTERS ─────────────────────────────────────────────────────────────────
 function toggleFilter(cat, btn) {
   if (activeFilters.has(cat)) {
     activeFilters.delete(cat);
     btn.classList.add('inactive');
-    (markerLayers[cat] || []).forEach(m => m.setOpacity(0.12));
+    (markerLayers[cat]||[]).forEach(m => m.setOpacity(0.15));
   } else {
     activeFilters.add(cat);
     btn.classList.remove('inactive');
-    (markerLayers[cat] || []).forEach(m => m.setOpacity(1));
+    (markerLayers[cat]||[]).forEach(m => m.setOpacity(1));
   }
   updateCounter();
 }
 
 function updateCounter() {
-  let count = 0;
-  activeFilters.forEach(cat => {
-    count += (markerLayers[cat] || []).length;
-  });
-  document.getElementById('event-count').textContent = count;
+  let n = 0;
+  activeFilters.forEach(c => { n += (markerLayers[c]||[]).length; });
+  document.getElementById('event-count').textContent = n;
 }
 
-// ─── RELOJ ─────────────────────────────────────────────────────────────────────
+function updateFilterCounts() {
+  ['war','political','economic','social'].forEach(cat => {
+    const el = document.getElementById(`cnt-${cat}`);
+    if (el) el.textContent = (markerLayers[cat]||[]).length;
+  });
+}
+
+// ─── MOBILE SIDEBAR ───────────────────────────────────────────────────────────
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+}
+
+// ─── CLOCK ───────────────────────────────────────────────────────────────────
 function updateClock() {
-  const now = new Date();
-  const str = now.toLocaleString('es-CL', {
-    day: '2-digit', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit', timeZone: 'America/Santiago'
-  });
-  document.getElementById('update-time').textContent = `${str} CLT`;
+  const el = document.getElementById('clock');
+  if (!el) return;
+  el.textContent = new Date().toLocaleTimeString('es-CL',{
+    hour:'2-digit', minute:'2-digit', timeZone:'America/Santiago'
+  }) + ' CLT';
 }
 
-// ─── INIT ──────────────────────────────────────────────────────────────────────
+// ─── MARKER PULSE CSS ─────────────────────────────────────────────────────────
+const style = document.createElement('style');
+style.textContent = `@keyframes pulse-mk {
+  0%   { transform:scale(1); opacity:0.25; }
+  100% { transform:scale(2.8); opacity:0; }
+}`;
+document.head.appendChild(style);
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
 window.addEventListener('load', () => {
   setTimeout(() => {
     initMap();
     updateClock();
     setInterval(updateClock, 30000);
-    checkRSSServer();
-    setInterval(checkRSSServer, 15000);
-
-    const overlay = document.getElementById('loading-overlay');
-    overlay.style.opacity = '0';
-    setTimeout(() => overlay.style.display = 'none', 500);
-  }, 1400);
+    checkRSS();
+    setInterval(checkRSS, 15000);
+    loadChileNews();
+    setInterval(loadChileNews, 8 * 60 * 1000);
+    const ov = document.getElementById('loading');
+    ov.style.opacity = '0';
+    setTimeout(() => ov.style.display = 'none', 400);
+  }, 1200);
 });
 </script>
 </body>
